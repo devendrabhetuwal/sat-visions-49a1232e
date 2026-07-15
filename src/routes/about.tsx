@@ -91,7 +91,7 @@ export function MarketingFooter() {
   return (
     <footer className="border-t border-border/40 py-10">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 text-xs text-muted-foreground md:flex-row">
-        <p>© {new Date().getFullYear()} SatVision AI — Built with Lovable</p>
+        <p>© {new Date().getFullYear()} SatVision AI&nbsp;</p>
         <div className="flex gap-5">
           <Link to="/about">About</Link>
           <Link to="/docs">Docs</Link>
