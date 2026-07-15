@@ -18,7 +18,7 @@ import { GeoMap } from "@/components/dashboard/GeoMap";
 import { AIChat } from "@/components/dashboard/AIChat";
 import { saveProject } from "@/lib/projects.functions";
 import { generateAnalysisReport } from "@/lib/ai-report.functions";
-import { Satellite, Upload, LogOut, Loader2, Layers, Info, Download, Save, FileText, FolderOpen, X } from "lucide-react";
+import { Satellite, Upload, LogOut, Loader2, Layers, Info, Download, Save, FileText, FolderOpen, X, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -240,6 +240,9 @@ function Dashboard() {
           <div className="flex items-center gap-2">
             <Link to="/projects" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5">
               <FolderOpen className="h-3.5 w-3.5" /> Projects
+            </Link>
+            <Link to="/analysis" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5">
+              <BarChart3 className="h-3.5 w-3.5" /> Analysis
             </Link>
             <button
               onClick={signOut}
