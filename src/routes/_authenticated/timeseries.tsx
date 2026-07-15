@@ -1,31 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ArrowLeft,
   Upload,
   Loader2,
   Trash2,
   Plus,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   Layers,
-  FileJson,
-  FileSpreadsheet,
+  Share2,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  ReferenceLine,
-} from "recharts";
+import { useServerFn } from "@tanstack/react-start";
 import { loadGeoTiff, computeIndex, downloadJson } from "@/lib/geotiff-utils";
+import { createTimeseriesShare } from "@/lib/timeseries-shares.functions";
+import {
+  TimeseriesResults,
+  type IndexKey,
+  type Scene,
+} from "@/components/timeseries/TimeseriesResults";
 
 export const Route = createFileRoute("/_authenticated/timeseries")({
   head: () => ({
@@ -42,30 +35,7 @@ export const Route = createFileRoute("/_authenticated/timeseries")({
 });
 
 type Stats = { min: number; mean: number; max: number };
-type Acquisition = {
-  id: string;
-  file: File;
-  fileName: string;
-  date: string;
-  bands: number;
-  ndvi: Stats;
-  ndwi: Stats;
-  ndbi: Stats;
-  bbox: [number, number, number, number];
-  bboxLatLng: [number, number, number, number] | null;
-  epsg?: number;
-};
-
-type IndexKey = "ndvi" | "ndwi" | "ndbi";
-
-const INDEX_META: Record<
-  IndexKey,
-  { label: string; subtitle: string; color: string }
-> = {
-  ndvi: { label: "NDVI", subtitle: "Vegetation", color: "#4ade80" },
-  ndwi: { label: "NDWI", subtitle: "Water", color: "#38bdf8" },
-  ndbi: { label: "NDBI", subtitle: "Built-up", color: "#fbbf24" },
-};
+type Acquisition = Scene & { file: File };
 
 function statsFrom(r: { min: number; max: number; mean: number }): Stats {
   return { min: r.min, mean: r.mean, max: r.max };
@@ -82,6 +52,10 @@ function TimeSeriesPage() {
     new Date().toISOString().slice(0, 10)
   );
   const [activeIndex, setActiveIndex] = useState<IndexKey>("ndvi");
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const createShare = useServerFn(createTimeseriesShare);
 
   const addAcquisition = async (file: File) => {
     setLoading(true);
@@ -137,6 +111,49 @@ function TimeSeriesPage() {
     setItems((prev) => prev.filter((i) => i.id !== id));
 
   const round = (n: number) => (isFinite(n) ? Number(n.toFixed(6)) : null);
+
+  const handleShare = async () => {
+    if (items.length === 0) return;
+    setSharing(true);
+    try {
+      const res = await createShare({
+        data: {
+          title: `Time-series — ${items[0].date} → ${items[items.length - 1].date}`,
+          payload: {
+            version: 1,
+            bandMapping: { red, green, nir, swir },
+            activeIndex,
+            scenes: items.map((it) => ({
+              id: it.id,
+              fileName: it.fileName,
+              date: it.date,
+              bands: it.bands,
+              ndvi: it.ndvi,
+              ndwi: it.ndwi,
+              ndbi: it.ndbi,
+              bbox: it.bbox,
+              bboxLatLng: it.bboxLatLng,
+              epsg: it.epsg ?? null,
+            })),
+          },
+        },
+      });
+      const url = `${window.location.origin}/share/timeseries/${res.id}`;
+      setShareUrl(url);
+      try {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+        toast.success("Share link copied to clipboard");
+      } catch {
+        toast.success("Share link created");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create share");
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const exportCsv = () => {
     if (items.length === 0) return;
