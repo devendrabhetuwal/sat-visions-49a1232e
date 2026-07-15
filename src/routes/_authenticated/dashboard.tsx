@@ -244,6 +244,9 @@ function Dashboard() {
             <Link to="/analysis" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5">
               <BarChart3 className="h-3.5 w-3.5" /> Analysis
             </Link>
+            <Link to="/timeseries" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5">
+              <BarChart3 className="h-3.5 w-3.5" /> Time-series
+            </Link>
             <button
               onClick={signOut}
               className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5"
