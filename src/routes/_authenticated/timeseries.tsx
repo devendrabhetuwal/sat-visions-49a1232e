@@ -244,59 +244,6 @@ function TimeSeriesPage() {
     toast.success("GeoJSON exported");
   };
 
-  const chartData = useMemo(
-    () =>
-      items.map((it) => ({
-        date: it.date,
-        NDVI: Number(it.ndvi.mean.toFixed(4)),
-        NDWI: Number(it.ndwi.mean.toFixed(4)),
-        NDBI: Number(it.ndbi.mean.toFixed(4)),
-        ndviMin: Number(it.ndvi.min.toFixed(4)),
-        ndviMax: Number(it.ndvi.max.toFixed(4)),
-        ndwiMin: Number(it.ndwi.min.toFixed(4)),
-        ndwiMax: Number(it.ndwi.max.toFixed(4)),
-        ndbiMin: Number(it.ndbi.min.toFixed(4)),
-        ndbiMax: Number(it.ndbi.max.toFixed(4)),
-      })),
-    [items]
-  );
-
-  const changes = useMemo(() => {
-    const compute = (key: IndexKey) => {
-      const vals = items.map((it) => it[key].mean);
-      if (vals.length < 2) return null;
-      const first = vals[0];
-      const last = vals[vals.length - 1];
-      const delta = last - first;
-      const pct = first !== 0 ? (delta / Math.abs(first)) * 100 : null;
-      let maxJumpIdx = -1;
-      let maxJump = 0;
-      for (let i = 1; i < vals.length; i++) {
-        const d = Math.abs(vals[i] - vals[i - 1]);
-        if (d > maxJump) {
-          maxJump = d;
-          maxJumpIdx = i;
-        }
-      }
-      return {
-        first,
-        last,
-        delta,
-        pct,
-        maxJump,
-        maxJumpFrom: maxJumpIdx > 0 ? items[maxJumpIdx - 1].date : null,
-        maxJumpTo: maxJumpIdx > 0 ? items[maxJumpIdx].date : null,
-      };
-    };
-    return {
-      ndvi: compute("ndvi"),
-      ndwi: compute("ndwi"),
-      ndbi: compute("ndbi"),
-    };
-  }, [items]);
-
-  const highlightedJump = changes[activeIndex];
-
   return (
     <div className="min-h-screen">
       <header className="glass sticky top-0 z-40 border-b border-border/40">
@@ -310,7 +257,21 @@ function TimeSeriesPage() {
           >
             Time-Series <span className="text-gradient">Comparison</span>
           </h1>
-          <div className="w-24" />
+          <button
+            onClick={handleShare}
+            disabled={sharing || items.length === 0}
+            className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+            title={items.length === 0 ? "Add scenes to share" : "Create shareable link"}
+          >
+            {sharing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : copied ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+            ) : (
+              <Share2 className="h-3.5 w-3.5" />
+            )}
+            {copied ? "Copied" : "Share"}
+          </button>
         </div>
       </header>
 
