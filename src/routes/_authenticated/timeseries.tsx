@@ -136,6 +136,97 @@ function TimeSeriesPage() {
   const removeItem = (id: string) =>
     setItems((prev) => prev.filter((i) => i.id !== id));
 
+  const round = (n: number) => (isFinite(n) ? Number(n.toFixed(6)) : null);
+
+  const exportCsv = () => {
+    if (items.length === 0) return;
+    const headers = [
+      "date","file","bands",
+      "ndvi_min","ndvi_mean","ndvi_max",
+      "ndwi_min","ndwi_mean","ndwi_max",
+      "ndbi_min","ndbi_mean","ndbi_max",
+      "ndvi_delta","ndwi_delta","ndbi_delta",
+      "bbox_minx","bbox_miny","bbox_maxx","bbox_maxy","epsg",
+    ];
+    const esc = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const fmt = (v: unknown) =>
+      typeof v === "number" && isFinite(v) ? Number(v.toFixed(6)) : v;
+    const rows = items.map((it, i) => {
+      const prev = items[i - 1];
+      const d = (k: IndexKey) => (prev ? it[k].mean - prev[k].mean : "");
+      return [
+        it.date, it.fileName, it.bands,
+        it.ndvi.min, it.ndvi.mean, it.ndvi.max,
+        it.ndwi.min, it.ndwi.mean, it.ndwi.max,
+        it.ndbi.min, it.ndbi.mean, it.ndbi.max,
+        d("ndvi"), d("ndwi"), d("ndbi"),
+        it.bbox[0], it.bbox[1], it.bbox[2], it.bbox[3],
+        it.epsg ?? "",
+      ].map(fmt).map(esc).join(",");
+    });
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `satvision-timeseries-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exported");
+  };
+
+  const exportGeoJSON = () => {
+    if (items.length === 0) return;
+    const features = items.map((it, i) => {
+      const prev = items[i - 1];
+      const bb = it.bboxLatLng ?? it.bbox;
+      const [minX, minY, maxX, maxY] = bb;
+      const ring = [
+        [minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY], [minX, minY],
+      ];
+      return {
+        type: "Feature" as const,
+        geometry: { type: "Polygon" as const, coordinates: [ring] },
+        properties: {
+          date: it.date,
+          file: it.fileName,
+          bands: it.bands,
+          epsg: it.epsg ?? null,
+          crs: it.bboxLatLng ? "EPSG:4326" : `EPSG:${it.epsg ?? "unknown"}`,
+          ndvi_min: round(it.ndvi.min),
+          ndvi_mean: round(it.ndvi.mean),
+          ndvi_max: round(it.ndvi.max),
+          ndwi_min: round(it.ndwi.min),
+          ndwi_mean: round(it.ndwi.mean),
+          ndwi_max: round(it.ndwi.max),
+          ndbi_min: round(it.ndbi.min),
+          ndbi_mean: round(it.ndbi.mean),
+          ndbi_max: round(it.ndbi.max),
+          ndvi_delta: prev ? round(it.ndvi.mean - prev.ndvi.mean) : null,
+          ndwi_delta: prev ? round(it.ndwi.mean - prev.ndwi.mean) : null,
+          ndbi_delta: prev ? round(it.ndbi.mean - prev.ndbi.mean) : null,
+        },
+      };
+    });
+    const fc = {
+      type: "FeatureCollection" as const,
+      metadata: {
+        generator: "SatVision AI",
+        exported_at: new Date().toISOString(),
+        scene_count: items.length,
+      },
+      features,
+    };
+    downloadJson(
+      fc,
+      `satvision-timeseries-${new Date().toISOString().slice(0, 10)}.geojson`
+    );
+    toast.success("GeoJSON exported");
+  };
+
   const chartData = useMemo(
     () =>
       items.map((it) => ({
