@@ -1,24 +1,107 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Satellite, Sparkles, Map, Brain, Upload, LineChart, ArrowRight } from "lucide-react";
+import heroEarth from "@/assets/hero-earth.jpg";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  component: Landing,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function Feature({ icon: Icon, title, desc }: { icon: typeof Satellite; title: string; desc: string }) {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="glass rounded-2xl p-6 transition-transform hover:-translate-y-1">
+      <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: "var(--gradient-primary)" }}>
+        <Icon className="h-5 w-5 text-primary-foreground" />
+      </div>
+      <h3 className="mb-2 font-semibold text-foreground" style={{ fontFamily: "Space Grotesk" }}>{title}</h3>
+      <p className="text-sm text-muted-foreground">{desc}</p>
+    </div>
+  );
+}
+
+function Landing() {
+  return (
+    <div className="min-h-screen">
+      {/* Nav */}
+      <header className="fixed top-0 z-50 w-full">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg glow" style={{ background: "var(--gradient-primary)" }}>
+              <Satellite className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <span className="text-lg font-bold tracking-tight" style={{ fontFamily: "Space Grotesk" }}>
+              SatVision <span className="text-gradient">AI</span>
+            </span>
+          </div>
+          <Link
+            to="/auth"
+            className="glass rounded-full px-5 py-2 text-sm font-medium transition-all hover:glow"
+          >
+            Sign in
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <section className="relative overflow-hidden pt-32 pb-24">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 lg:grid-cols-2">
+          <div>
+            <div className="glass mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-primary">
+              <Sparkles className="h-3.5 w-3.5" />
+              AI-powered geospatial intelligence
+            </div>
+            <h1 className="mb-6 text-5xl font-bold leading-[1.05] tracking-tight md:text-6xl" style={{ fontFamily: "Space Grotesk" }}>
+              See Earth the way <span className="text-gradient">AI does.</span>
+            </h1>
+            <p className="mb-8 max-w-lg text-lg text-muted-foreground">
+              Upload GeoTIFF satellite imagery, compute vegetation and water indices in your browser, and ask an AI assistant to explain the science — all in one workspace.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                to="/auth"
+                className="group inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:glow"
+                style={{ background: "var(--gradient-primary)" }}
+              >
+                Launch dashboard
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+              <a href="#features" className="glass inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium">
+                Explore features
+              </a>
+            </div>
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 -z-10 blur-3xl" style={{ background: "var(--gradient-aurora)" }} />
+            <img
+              src={heroEarth}
+              alt="Earth from orbit with aurora"
+              width={1024}
+              height={1024}
+              className="mx-auto w-full max-w-md rounded-3xl glass p-2"
+              style={{ animation: "float 8s ease-in-out infinite" }}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section id="features" className="mx-auto max-w-7xl px-6 pb-24">
+        <h2 className="mb-2 text-center text-3xl font-bold" style={{ fontFamily: "Space Grotesk" }}>
+          Built for <span className="text-gradient">remote sensing scientists</span>
+        </h2>
+        <p className="mx-auto mb-12 max-w-2xl text-center text-muted-foreground">
+          A modern browser-native toolkit. No installs, no CLIs — just your data and AI.
+        </p>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+          <Feature icon={Upload} title="GeoTIFF Upload" desc="Drop a single or multi-band GeoTIFF and we'll parse metadata, bounds, and CRS instantly." />
+          <Feature icon={Map} title="Interactive Maps" desc="Leaflet-powered layers with satellite, terrain, and street basemaps plus overlay support." />
+          <Feature icon={LineChart} title="NDVI & NDWI" desc="Compute vegetation and water indices client-side with real-time histogram statistics." />
+          <Feature icon={Brain} title="AI Assistant" desc="Ask questions about your dataset. Get NDVI explanations, anomaly hints, and next steps." />
+        </div>
+      </section>
+
+      <footer className="border-t border-border/40 py-8 text-center text-xs text-muted-foreground">
+        © {new Date().getFullYear()} SatVision AI — Powered by Lovable AI
+      </footer>
     </div>
   );
 }
