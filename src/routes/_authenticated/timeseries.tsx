@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Upload,
   Loader2,
-  Trash2,
   Plus,
   Layers,
   Share2,
