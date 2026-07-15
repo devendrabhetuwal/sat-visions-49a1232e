@@ -20,6 +20,7 @@ import { Route as AuthenticatedTimeseriesRouteImport } from './routes/_authentic
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAnalysisRouteImport } from './routes/_authenticated/analysis'
+import { Route as ShareTimeseriesIdRouteImport } from './routes/share.timeseries.$id'
 
 const PricingRoute = PricingRouteImport.update({
   id: '/pricing',
@@ -75,6 +76,11 @@ const AuthenticatedAnalysisRoute = AuthenticatedAnalysisRouteImport.update({
   path: '/analysis',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ShareTimeseriesIdRoute = ShareTimeseriesIdRouteImport.update({
+  id: '/share/timeseries/$id',
+  path: '/share/timeseries/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/timeseries': typeof AuthenticatedTimeseriesRoute
+  '/share/timeseries/$id': typeof ShareTimeseriesIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/timeseries': typeof AuthenticatedTimeseriesRoute
+  '/share/timeseries/$id': typeof ShareTimeseriesIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/timeseries': typeof AuthenticatedTimeseriesRoute
+  '/share/timeseries/$id': typeof ShareTimeseriesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/projects'
     | '/timeseries'
+    | '/share/timeseries/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/projects'
     | '/timeseries'
+    | '/share/timeseries/$id'
   id:
     | '__root__'
     | '/'
@@ -152,6 +163,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/projects'
     | '/_authenticated/timeseries'
+    | '/share/timeseries/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -162,6 +174,7 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   DocsRoute: typeof DocsRoute
   PricingRoute: typeof PricingRoute
+  ShareTimeseriesIdRoute: typeof ShareTimeseriesIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -243,6 +256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnalysisRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/share/timeseries/$id': {
+      id: '/share/timeseries/$id'
+      path: '/share/timeseries/$id'
+      fullPath: '/share/timeseries/$id'
+      preLoaderRoute: typeof ShareTimeseriesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -271,6 +291,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   DocsRoute: DocsRoute,
   PricingRoute: PricingRoute,
+  ShareTimeseriesIdRoute: ShareTimeseriesIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
