@@ -18,6 +18,12 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Surface OAuth errors returned in the URL (e.g. access_denied, redirect mismatch)
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const search = new URLSearchParams(window.location.search);
+    const err = hash.get("error_description") || search.get("error_description") || search.get("error");
+    if (err) toast.error(decodeURIComponent(err.replace(/\+/g, " ")));
+
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/dashboard" });
     });
@@ -37,7 +43,9 @@ function AuthPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+          // Land back on the public /auth route so the session hydrates
+          // BEFORE the _authenticated gate runs (avoids losing hash tokens / 404).
+          options: { emailRedirectTo: `${window.location.origin}/auth` },
         });
         if (error) throw error;
         toast.success("Account created — check your email if confirmation is required.");
@@ -55,7 +63,7 @@ function AuthPage() {
   const handleGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/auth`,
     });
     if (result.error) {
       toast.error(result.error.message || "Google sign-in failed");
@@ -66,7 +74,7 @@ function AuthPage() {
   const handleApple = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("apple", {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/auth`,
     });
     if (result.error) {
       toast.error(result.error.message || "Apple sign-in failed");
