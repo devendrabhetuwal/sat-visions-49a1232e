@@ -1,4 +1,8 @@
 import "./lib/error-capture";
+import { validateEnv } from "./lib/env-check";
+
+// Validate required env vars at startup so missing keys surface in logs immediately
+validateEnv();
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
