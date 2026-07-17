@@ -4,24 +4,24 @@ import {
   Shield, Users, FolderOpen, Share2, Trash2, ArrowLeft,
   Loader2, Satellite, ExternalLink, Activity, Globe,
   TrendingUp, AlertTriangle, Flame, Wind, Waves,
-  RefreshCw, Clock, BarChart3,
+  RefreshCw, Clock, BarChart3, LayoutDashboard, ChevronRight,
+  UserCircle2, LogIn,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, LineChart, Line, Cell,
 } from "recharts";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   ssr: false,
-  beforeLoad: () => {
-    // Admin session is already verified by /_authenticated/route.tsx
-  },
+  beforeLoad: () => {},
   component: AdminPage,
 });
 
 type Tab = "overview" | "logins" | "nasa" | "users" | "projects" | "shares";
 
-// ─── Login event helpers ──────────────────────────────────────────────────────
+// ─── Login event helpers ───────────────────────────────────────────────────────
 interface LoginEvent {
   type: "admin" | "user";
   username: string;
@@ -41,23 +41,36 @@ function getTrafficData() {
   const events = getLoginEvents();
   const byDay: Record<string, number> = {};
   const now = Date.now();
-  // Last 7 days
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now - i * 86400000);
     const key = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     byDay[key] = 0;
   }
   for (const ev of events) {
-    const d = new Date(ev.time);
     if (now - ev.time <= 7 * 86400000) {
-      const key = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const key = new Date(ev.time).toLocaleDateString("en-US", { month: "short", day: "numeric" });
       if (key in byDay) byDay[key]++;
     }
   }
   return Object.entries(byDay).map(([date, logins]) => ({ date, logins }));
 }
 
-// ─── NASA EONET natural events ────────────────────────────────────────────────
+function getTrafficByUser() {
+  const events = getLoginEvents();
+  const byUser: Record<string, { count: number; type: "admin" | "user"; lastSeen: number }> = {};
+  for (const ev of events) {
+    if (!byUser[ev.username]) {
+      byUser[ev.username] = { count: 0, type: ev.type, lastSeen: ev.time };
+    }
+    byUser[ev.username].count++;
+    if (ev.time > byUser[ev.username].lastSeen) byUser[ev.username].lastSeen = ev.time;
+  }
+  return Object.entries(byUser)
+    .map(([username, s]) => ({ username, ...s }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// ─── NASA EONET ───────────────────────────────────────────────────────────────
 interface NasaEvent {
   id: string;
   title: string;
@@ -73,7 +86,7 @@ const CATEGORY_ICON: Record<string, React.ReactNode> = {
   "Volcanoes": <AlertTriangle className="h-3.5 w-3.5 text-red-400" />,
 };
 
-// ─── Supabase helpers (optional — fail gracefully) ────────────────────────────
+// ─── Supabase helpers ─────────────────────────────────────────────────────────
 async function trySupabaseAdmin() {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -83,71 +96,126 @@ async function trySupabaseAdmin() {
   }
 }
 
+// ─── Nav config ───────────────────────────────────────────────────────────────
+const NAV_ITEMS: { id: Tab; label: string; icon: React.ReactNode; desc: string }[] = [
+  { id: "overview",  label: "Overview",   icon: <LayoutDashboard className="h-4 w-4" />, desc: "Stats & traffic" },
+  { id: "logins",   label: "Login Log",  icon: <LogIn className="h-4 w-4" />,           desc: "All sessions" },
+  { id: "nasa",     label: "NASA Events",icon: <Globe className="h-4 w-4" />,            desc: "Live EONET data" },
+  { id: "users",    label: "Users",      icon: <Users className="h-4 w-4" />,            desc: "Supabase accounts" },
+  { id: "projects", label: "Projects",   icon: <FolderOpen className="h-4 w-4" />,       desc: "GeoTIFF uploads" },
+  { id: "shares",   label: "Shares",     icon: <Share2 className="h-4 w-4" />,           desc: "Public time-series" },
+];
+
 // ─── Admin page ───────────────────────────────────────────────────────────────
 function AdminPage() {
   const [tab, setTab] = useState<Tab>("overview");
+  const current = NAV_ITEMS.find((n) => n.id === tab)!;
 
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen flex-col">
+      {/* ── Top header ── */}
       <header className="glass sticky top-0 z-40 border-b border-border/40">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg glow" style={{ background: "var(--gradient-primary)" }}>
-              <Satellite className="h-5 w-5 text-primary-foreground" />
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between px-5 py-3">
+          <Link to="/" className="flex items-center gap-2.5">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg glow"
+              style={{ background: "var(--gradient-primary)" }}
+            >
+              <Satellite className="h-4 w-4 text-primary-foreground" />
             </div>
             <span className="text-sm font-bold" style={{ fontFamily: "Space Grotesk" }}>
               SatVision <span className="text-gradient">AI</span>
             </span>
           </Link>
+
           <div className="flex items-center gap-2">
-            <span className="glass flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
+            <span className="hidden sm:flex glass items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
               <Shield className="h-3 w-3" /> Admin Console
             </span>
-            <Link to="/dashboard" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium">
+            <Link
+              to="/dashboard"
+              className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium hover:text-primary transition-colors"
+            >
               <ArrowLeft className="h-3.5 w-3.5" /> Exit
             </Link>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-6 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold" style={{ fontFamily: "Space Grotesk" }}>
-            <span className="text-gradient">Administration</span>
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Monitor users, activity, satellite events, and manage content.
-          </p>
-        </div>
+      {/* ── Body: sidebar + content ── */}
+      <div className="mx-auto flex w-full max-w-[1400px] flex-1 gap-0 px-4 py-6 sm:gap-6">
 
-        {/* Tabs */}
-        <div className="mb-6 flex flex-wrap gap-2">
-          {([
-            { id: "overview", label: "Overview", icon: <BarChart3 className="h-4 w-4" /> },
-            { id: "logins", label: "Login Log", icon: <Clock className="h-4 w-4" /> },
-            { id: "nasa", label: "NASA Events", icon: <Globe className="h-4 w-4" /> },
-            { id: "users", label: "Users", icon: <Users className="h-4 w-4" /> },
-            { id: "projects", label: "Projects", icon: <FolderOpen className="h-4 w-4" /> },
-            { id: "shares", label: "Shares", icon: <Share2 className="h-4 w-4" /> },
-          ] as { id: Tab; label: string; icon: React.ReactNode }[]).map((t) => (
+        {/* Sidebar */}
+        <aside className="hidden w-56 shrink-0 lg:block">
+          <div className="glass sticky top-20 rounded-2xl border border-border/40 overflow-hidden">
+            <div className="border-b border-border/30 px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Navigation</p>
+            </div>
+            <nav className="p-2">
+              {NAV_ITEMS.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setTab(item.id)}
+                  className={`group mb-0.5 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
+                    tab === item.id
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+                  }`}
+                >
+                  <span className={tab === item.id ? "text-primary" : ""}>{item.icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium leading-tight">{item.label}</p>
+                    <p className="text-[10px] leading-tight opacity-60">{item.desc}</p>
+                  </div>
+                  {tab === item.id && (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  )}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </aside>
+
+        {/* Mobile tab bar */}
+        <div className="mb-4 flex flex-wrap gap-1.5 lg:hidden w-full">
+          {NAV_ITEMS.map((item) => (
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`glass flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                tab === t.id ? "border-primary/60 text-primary glow" : "text-muted-foreground hover:text-foreground"
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={`glass flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition ${
+                tab === item.id ? "border-primary/60 text-primary glow" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {t.icon}{t.label}
+              {item.icon} {item.label}
             </button>
           ))}
         </div>
 
-        {tab === "overview" && <OverviewPanel />}
-        {tab === "logins" && <LoginLogPanel />}
-        {tab === "nasa" && <NasaPanel />}
-        {tab === "users" && <UsersPanel />}
-        {tab === "projects" && <ProjectsPanel />}
-        {tab === "shares" && <SharesPanel />}
+        {/* Main content */}
+        <main className="min-w-0 flex-1">
+          {/* Breadcrumb */}
+          <div className="mb-5 flex items-center gap-2">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg"
+              style={{ background: "oklch(from var(--primary) l c h / 0.12)" }}
+            >
+              <span className="text-primary">{current.icon}</span>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold leading-tight" style={{ fontFamily: "Space Grotesk" }}>
+                {current.label}
+              </h1>
+              <p className="text-xs text-muted-foreground">{current.desc}</p>
+            </div>
+          </div>
+
+          {tab === "overview"  && <OverviewPanel />}
+          {tab === "logins"   && <LoginLogPanel />}
+          {tab === "nasa"     && <NasaPanel />}
+          {tab === "users"    && <UsersPanel />}
+          {tab === "projects" && <ProjectsPanel />}
+          {tab === "shares"   && <SharesPanel />}
+        </main>
       </div>
     </div>
   );
@@ -157,63 +225,183 @@ function AdminPage() {
 function OverviewPanel() {
   const events = getLoginEvents();
   const trafficData = getTrafficData();
+  const userTraffic = getTrafficByUser();
   const totalLogins = events.length;
   const adminLogins = events.filter((e) => e.type === "admin").length;
   const userLogins = events.filter((e) => e.type === "user").length;
   const last24h = events.filter((e) => Date.now() - e.time < 86400000).length;
 
+  const COLORS = ["#6ec6f5", "#a78bfa", "#34d399", "#f59e0b", "#f87171", "#60a5fa"];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Logins" value={totalLogins} icon={<TrendingUp className="h-4 w-4 text-primary" />} />
-        <StatCard label="Last 24 Hours" value={last24h} icon={<Activity className="h-4 w-4 text-green-400" />} />
-        <StatCard label="User Sessions" value={userLogins} icon={<Users className="h-4 w-4 text-blue-400" />} />
-        <StatCard label="Admin Sessions" value={adminLogins} icon={<Shield className="h-4 w-4 text-orange-400" />} />
+        <StatCard label="Total Logins"   value={totalLogins} icon={<TrendingUp className="h-4 w-4" />} color="primary" />
+        <StatCard label="Last 24 Hours"  value={last24h}     icon={<Activity className="h-4 w-4" />}   color="green" />
+        <StatCard label="User Sessions"  value={userLogins}  icon={<Users className="h-4 w-4" />}       color="blue" />
+        <StatCard label="Admin Sessions" value={adminLogins} icon={<Shield className="h-4 w-4" />}      color="orange" />
       </div>
 
-      {/* Traffic chart */}
-      <div className="glass rounded-xl border border-border/40 p-5">
-        <h2 className="mb-4 text-sm font-semibold">Login Traffic — Last 7 Days</h2>
-        {totalLogins === 0 ? (
-          <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-            No login events recorded yet. Logins will appear here after users sign in.
+      <div className="grid gap-5 lg:grid-cols-2">
+        {/* Traffic 7-day chart */}
+        <div className="glass rounded-2xl border border-border/40 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Login Traffic — Last 7 Days</h2>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={trafficData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-              <Tooltip
-                contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-              />
-              <Bar dataKey="logins" fill="url(#grad)" radius={[4, 4, 0, 0]} />
-              <defs>
-                <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6ec6f5" />
-                  <stop offset="100%" stopColor="#a78bfa" />
-                </linearGradient>
-              </defs>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
+          {totalLogins === 0 ? (
+            <div className="flex h-44 items-center justify-center text-sm text-muted-foreground">
+              No login events yet. Logins will appear after users sign in.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={trafficData}>
+                <defs>
+                  <linearGradient id="grad7" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6ec6f5" />
+                    <stop offset="100%" stopColor="#a78bfa" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+                <Tooltip
+                  contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                />
+                <Bar dataKey="logins" fill="url(#grad7)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Traffic by username */}
+        <div className="glass rounded-2xl border border-border/40 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Traffic by Username</h2>
+            <UserCircle2 className="h-4 w-4 text-muted-foreground" />
+          </div>
+          {userTraffic.length === 0 ? (
+            <div className="flex h-44 items-center justify-center text-sm text-muted-foreground">
+              No login data yet.
+            </div>
+          ) : userTraffic.length <= 6 ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={userTraffic} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+                <YAxis
+                  type="category"
+                  dataKey="username"
+                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                  width={80}
+                />
+                <Tooltip
+                  contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                  {userTraffic.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="max-h-[180px] overflow-y-auto space-y-1.5 pr-1">
+              {userTraffic.map((u, i) => (
+                <div key={u.username} className="flex items-center gap-3 rounded-lg px-3 py-1.5 hover:bg-muted/10">
+                  <span className="w-5 text-center text-[10px] font-bold text-muted-foreground">#{i + 1}</span>
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: COLORS[i % COLORS.length] }}
+                  />
+                  <span className="flex-1 truncate text-xs font-medium">{u.username}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                    u.type === "admin" ? "bg-primary/20 text-primary" : "bg-blue-500/20 text-blue-400"
+                  }`}>{u.type}</span>
+                  <span className="shrink-0 text-xs font-bold">{u.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Username detail table */}
+      {userTraffic.length > 0 && (
+        <div className="glass rounded-2xl border border-border/40 overflow-hidden">
+          <div className="border-b border-border/30 px-5 py-3">
+            <h2 className="text-sm font-semibold">User Login Summary</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/10 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3">Username</th>
+                  <th className="px-5 py-3">Type</th>
+                  <th className="px-5 py-3">Total Logins</th>
+                  <th className="px-5 py-3">Last Seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {userTraffic.map((u, i) => (
+                  <tr key={u.username} className="border-t border-border/20 hover:bg-muted/10">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: COLORS[i % COLORS.length] }}
+                        />
+                        <span className="font-medium">{u.username}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                        u.type === "admin" ? "bg-primary/20 text-primary" : "bg-blue-500/20 text-blue-400"
+                      }`}>{u.type}</span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-1.5 rounded-full"
+                          style={{
+                            width: `${Math.max(20, (u.count / userTraffic[0].count) * 80)}px`,
+                            background: COLORS[i % COLORS.length],
+                            opacity: 0.7,
+                          }}
+                        />
+                        <span className="font-bold">{u.count}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-xs text-muted-foreground">
+                      {new Date(u.lastSeen).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Recent activity */}
-      <div className="glass rounded-xl border border-border/40 p-5">
-        <h2 className="mb-3 text-sm font-semibold">Recent Activity</h2>
+      <div className="glass rounded-2xl border border-border/40 p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Recent Activity</h2>
+          <Clock className="h-4 w-4 text-muted-foreground" />
+        </div>
         {events.length === 0 ? (
           <p className="text-sm text-muted-foreground">No activity yet.</p>
         ) : (
-          <div className="space-y-2">
-            {[...events].reverse().slice(0, 8).map((ev, i) => (
-              <div key={i} className="flex items-center justify-between rounded-lg bg-muted/10 px-3 py-2 text-xs">
+          <div className="space-y-1.5">
+            {[...events].reverse().slice(0, 10).map((ev, i) => (
+              <div key={i} className="flex items-center justify-between rounded-xl bg-muted/10 px-4 py-2.5 text-xs">
                 <span className="flex items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
                     ev.type === "admin" ? "bg-primary/20 text-primary" : "bg-blue-500/20 text-blue-400"
                   }`}>{ev.type}</span>
-                  <span className="font-medium">{ev.username}</span> signed in
+                  <span className="font-medium">{ev.username}</span>
+                  <span className="text-muted-foreground">signed in</span>
                 </span>
                 <span className="text-muted-foreground">{new Date(ev.time).toLocaleString()}</span>
               </div>
@@ -230,9 +418,7 @@ function LoginLogPanel() {
   const [events, setEvents] = useState<LoginEvent[]>([]);
   const [filter, setFilter] = useState<"all" | "admin" | "user">("all");
 
-  useEffect(() => {
-    setEvents([...getLoginEvents()].reverse());
-  }, []);
+  useEffect(() => { setEvents([...getLoginEvents()].reverse()); }, []);
 
   const filtered = filter === "all" ? events : events.filter((e) => e.type === filter);
 
@@ -267,30 +453,30 @@ function LoginLogPanel() {
         </button>
       </div>
 
-      <div className="glass overflow-hidden rounded-xl border border-border/40">
+      <div className="glass overflow-hidden rounded-2xl border border-border/40">
         <table className="w-full text-sm">
           <thead className="border-b border-border/40 bg-muted/20 text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Username</th>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Time</th>
+              <th className="px-5 py-3">Type</th>
+              <th className="px-5 py-3">Username</th>
+              <th className="px-5 py-3">Date</th>
+              <th className="px-5 py-3">Time</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No login events recorded.</td></tr>
+              <tr><td colSpan={4} className="px-5 py-10 text-center text-muted-foreground">No login events recorded.</td></tr>
             )}
             {filtered.map((ev, i) => (
-              <tr key={i} className="border-b border-border/20 hover:bg-muted/10">
-                <td className="px-4 py-3">
+              <tr key={i} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
+                <td className="px-5 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
                     ev.type === "admin" ? "bg-primary/20 text-primary" : "bg-blue-500/20 text-blue-400"
                   }`}>{ev.type}</span>
                 </td>
-                <td className="px-4 py-3 font-medium">{ev.username}</td>
-                <td className="px-4 py-3 text-muted-foreground">{new Date(ev.time).toLocaleDateString()}</td>
-                <td className="px-4 py-3 text-muted-foreground">{new Date(ev.time).toLocaleTimeString()}</td>
+                <td className="px-5 py-3 font-medium">{ev.username}</td>
+                <td className="px-5 py-3 text-muted-foreground">{new Date(ev.time).toLocaleDateString()}</td>
+                <td className="px-5 py-3 text-muted-foreground">{new Date(ev.time).toLocaleTimeString()}</td>
               </tr>
             ))}
           </tbody>
@@ -319,7 +505,7 @@ function NasaPanel() {
       const apodJson = await apodRes.json();
       setEvents(eonetJson.events ?? []);
       if (apodJson.url) setApod(apodJson);
-    } catch (e) {
+    } catch {
       setError("Failed to fetch NASA data. Check your internet connection.");
     } finally {
       setLoading(false);
@@ -329,7 +515,7 @@ function NasaPanel() {
   useEffect(() => { fetchData(); }, []);
 
   if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Fetching NASA data…</div>;
-  if (error) return <div className="glass rounded-xl border border-destructive/40 p-4 text-sm text-destructive">{error}</div>;
+  if (error) return <div className="glass rounded-2xl border border-destructive/40 p-4 text-sm text-destructive">{error}</div>;
 
   const categoryCounts: Record<string, number> = {};
   for (const ev of events) {
@@ -339,20 +525,19 @@ function NasaPanel() {
   const categoryData = Object.entries(categoryCounts).map(([name, count]) => ({ name, count }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold" style={{ fontFamily: "Space Grotesk" }}>NASA Earth Observatory Natural Events</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Live data via NASA EONET — {events.length} active events in last 30 days</p>
+          <h2 className="text-base font-bold" style={{ fontFamily: "Space Grotesk" }}>NASA Earth Observatory Natural Events</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Live via NASA EONET — {events.length} active events (last 30 days)</p>
         </div>
-        <button onClick={fetchData} className="glass flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs hover:text-primary">
+        <button onClick={fetchData} className="glass flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs hover:text-primary transition-colors">
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </button>
       </div>
 
-      {/* Category breakdown chart */}
       {categoryData.length > 0 && (
-        <div className="glass rounded-xl border border-border/40 p-5">
+        <div className="glass rounded-2xl border border-border/40 p-5">
           <h3 className="mb-4 text-sm font-semibold">Events by Category</h3>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={categoryData} layout="vertical">
@@ -366,9 +551,8 @@ function NasaPanel() {
         </div>
       )}
 
-      {/* APOD */}
       {apod && apod.url?.match(/\.(jpg|jpeg|png|gif|webp)/i) && (
-        <div className="glass overflow-hidden rounded-xl border border-border/40">
+        <div className="glass overflow-hidden rounded-2xl border border-border/40">
           <img src={apod.url} alt={apod.title} className="h-48 w-full object-cover" />
           <div className="p-4">
             <div className="flex items-start justify-between gap-2">
@@ -385,18 +569,17 @@ function NasaPanel() {
         </div>
       )}
 
-      {/* Events list */}
-      <div className="glass overflow-hidden rounded-xl border border-border/40">
-        <div className="border-b border-border/40 px-4 py-3">
+      <div className="glass overflow-hidden rounded-2xl border border-border/40">
+        <div className="border-b border-border/40 px-5 py-3">
           <h3 className="text-sm font-semibold">Active Natural Events</h3>
         </div>
-        <div className="divide-y divide-border/20 max-h-[500px] overflow-y-auto">
+        <div className="max-h-[500px] divide-y divide-border/20 overflow-y-auto">
           {events.map((ev) => {
             const cat = ev.categories[0]?.title ?? "Other";
             const latestDate = ev.geometry?.[ev.geometry.length - 1]?.date;
             return (
-              <div key={ev.id} className="flex items-start justify-between px-4 py-3 hover:bg-muted/10">
-                <div className="flex items-start gap-3 min-w-0">
+              <div key={ev.id} className="flex items-start justify-between px-5 py-3 hover:bg-muted/10 transition-colors">
+                <div className="flex min-w-0 items-start gap-3">
                   <span className="mt-0.5 shrink-0">{CATEGORY_ICON[cat] ?? <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />}</span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{ev.title}</p>
@@ -408,7 +591,7 @@ function NasaPanel() {
                 </div>
                 {ev.sources[0]?.url && (
                   <a href={ev.sources[0].url} target="_blank" rel="noreferrer"
-                    className="ml-3 shrink-0 rounded-md glass px-2 py-1 text-[10px] flex items-center gap-1 hover:text-primary">
+                    className="ml-3 flex shrink-0 items-center gap-1 rounded-md glass px-2 py-1 text-[10px] hover:text-primary transition-colors">
                     <ExternalLink className="h-3 w-3" /> Source
                   </a>
                 )}
@@ -416,13 +599,12 @@ function NasaPanel() {
             );
           })}
           {events.length === 0 && (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">No active events found.</div>
+            <div className="px-5 py-10 text-center text-sm text-muted-foreground">No active events found.</div>
           )}
         </div>
       </div>
 
-      {/* Data sources */}
-      <div className="glass rounded-xl border border-border/40 p-4">
+      <div className="glass rounded-2xl border border-border/40 p-5">
         <h3 className="mb-3 text-sm font-semibold">Satellite Data Sources</h3>
         <div className="grid gap-2 sm:grid-cols-2">
           {[
@@ -434,7 +616,7 @@ function NasaPanel() {
             { name: "Google Earth Engine", desc: "Planetary-scale geospatial analysis", url: "https://earthengine.google.com" },
           ].map((src) => (
             <a key={src.name} href={src.url} target="_blank" rel="noreferrer"
-              className="glass flex items-start gap-2 rounded-lg p-3 hover:bg-white/5 transition-colors">
+              className="glass flex items-start gap-2 rounded-xl p-3 hover:bg-white/5 transition-colors">
               <Globe className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <div>
                 <p className="text-sm font-medium">{src.name} ↗</p>
@@ -458,7 +640,7 @@ function UsersPanel() {
     (async () => {
       try {
         const sb = await trySupabaseAdmin();
-        if (!sb) throw new Error("Supabase not configured");
+        if (!sb) throw new Error("Supabase admin client not available");
         const { data: users, error: err } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
         if (err) throw new Error(err.message);
         const { data: roles } = await sb.from("user_roles").select("user_id, role");
@@ -487,42 +669,45 @@ function UsersPanel() {
   const users = data ?? [];
 
   return (
-    <div>
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Users" value={users.length} />
-        <StatCard label="Admins" value={users.filter((u) => u.roles.includes("admin")).length} />
-        <StatCard label="Confirmed" value={users.filter((u) => u.email_confirmed_at).length} />
-        <StatCard label="Active 24h" value={users.filter((u) => u.last_sign_in_at && Date.now() - new Date(u.last_sign_in_at).getTime() < 86400000).length} />
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Total Users"  value={users.length} icon={<Users className="h-4 w-4" />} color="primary" />
+        <StatCard label="Admins"       value={users.filter((u) => u.roles.includes("admin")).length} icon={<Shield className="h-4 w-4" />} color="orange" />
+        <StatCard label="Confirmed"    value={users.filter((u) => u.email_confirmed_at).length} icon={<Activity className="h-4 w-4" />} color="green" />
+        <StatCard label="Active 24h"   value={users.filter((u) => u.last_sign_in_at && Date.now() - new Date(u.last_sign_in_at).getTime() < 86400000).length} icon={<TrendingUp className="h-4 w-4" />} color="blue" />
       </div>
-      <div className="glass overflow-hidden rounded-xl border border-border/40">
+      <div className="glass overflow-hidden rounded-2xl border border-border/40">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border/40 bg-muted/20 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Provider</th>
-                <th className="px-4 py-3">Roles</th>
-                <th className="px-4 py-3">Joined</th>
-                <th className="px-4 py-3">Last sign-in</th>
+                <th className="px-5 py-3">Email</th>
+                <th className="px-5 py-3">Provider</th>
+                <th className="px-5 py-3">Roles</th>
+                <th className="px-5 py-3">Joined</th>
+                <th className="px-5 py-3">Last sign-in</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} className="border-b border-border/20 hover:bg-muted/10">
-                  <td className="px-4 py-3 font-medium">{u.email ?? "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{u.provider}</td>
-                  <td className="px-4 py-3">
+                <tr key={u.id} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
+                  <td className="px-5 py-3 font-medium">{u.email ?? "—"}</td>
+                  <td className="px-5 py-3 text-muted-foreground capitalize">{u.provider}</td>
+                  <td className="px-5 py-3">
                     <div className="flex gap-1">
                       {u.roles.map((r: string) => (
-                        <span key={r} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${r === "admin" ? "bg-primary/20 text-primary" : "bg-muted/40 text-muted-foreground"}`}>{r}</span>
+                        <span key={r} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          r === "admin" ? "bg-primary/20 text-primary" : "bg-muted/40 text-muted-foreground"
+                        }`}>{r}</span>
                       ))}
+                      {u.roles.length === 0 && <span className="text-[11px] text-muted-foreground">user</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : "Never"}</td>
+                  <td className="px-5 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="px-5 py-3 text-xs text-muted-foreground">{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : "Never"}</td>
                 </tr>
               ))}
-              {users.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No users found.</td></tr>}
+              {users.length === 0 && <tr><td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">No users found.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -541,7 +726,7 @@ function ProjectsPanel() {
     (async () => {
       try {
         const sb = await trySupabaseAdmin();
-        if (!sb) throw new Error("Supabase not configured");
+        if (!sb) throw new Error("Supabase admin client not available");
         const { data: rows, error: err } = await sb.from("projects")
           .select("id, user_id, name, file_name, width, height, bands, epsg, projected, last_index, created_at, updated_at")
           .order("updated_at", { ascending: false }).limit(500);
@@ -560,40 +745,40 @@ function ProjectsPanel() {
   const rows = data ?? [];
 
   return (
-    <div>
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Projects" value={rows.length} />
-        <StatCard label="Georef'd" value={rows.filter((r) => r.projected).length} />
-        <StatCard label="Multi-band" value={rows.filter((r) => r.bands > 1).length} />
-        <StatCard label="Unique Owners" value={new Set(rows.map((r) => r.user_id)).size} />
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Projects"      value={rows.length} icon={<FolderOpen className="h-4 w-4" />} color="primary" />
+        <StatCard label="Georef'd"      value={rows.filter((r) => r.projected).length} icon={<Globe className="h-4 w-4" />} color="blue" />
+        <StatCard label="Multi-band"    value={rows.filter((r) => r.bands > 1).length} icon={<BarChart3 className="h-4 w-4" />} color="green" />
+        <StatCard label="Unique Owners" value={new Set(rows.map((r) => r.user_id)).size} icon={<Users className="h-4 w-4" />} color="orange" />
       </div>
-      <div className="glass overflow-hidden rounded-xl border border-border/40">
+      <div className="glass overflow-hidden rounded-2xl border border-border/40">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border/40 bg-muted/20 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">File</th>
-                <th className="px-4 py-3">Size</th>
-                <th className="px-4 py-3">Bands</th>
-                <th className="px-4 py-3">EPSG</th>
-                <th className="px-4 py-3">Last index</th>
-                <th className="px-4 py-3">Updated</th>
+                <th className="px-5 py-3">Name</th>
+                <th className="px-5 py-3">File</th>
+                <th className="px-5 py-3">Size</th>
+                <th className="px-5 py-3">Bands</th>
+                <th className="px-5 py-3">EPSG</th>
+                <th className="px-5 py-3">Last index</th>
+                <th className="px-5 py-3">Updated</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-border/20 hover:bg-muted/10">
-                  <td className="px-4 py-3 font-medium">{r.name}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{r.file_name}</td>
-                  <td className="px-4 py-3 text-xs">{r.width}×{r.height}</td>
-                  <td className="px-4 py-3 text-xs">{r.bands}</td>
-                  <td className="px-4 py-3 text-xs">{r.epsg ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs">{r.last_index ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(r.updated_at).toLocaleDateString()}</td>
+                <tr key={r.id} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
+                  <td className="px-5 py-3 font-medium">{r.name}</td>
+                  <td className="px-5 py-3 text-xs text-muted-foreground">{r.file_name}</td>
+                  <td className="px-5 py-3 text-xs">{r.width}×{r.height}</td>
+                  <td className="px-5 py-3 text-xs">{r.bands}</td>
+                  <td className="px-5 py-3 text-xs">{r.epsg ?? "—"}</td>
+                  <td className="px-5 py-3 text-xs">{r.last_index ?? "—"}</td>
+                  <td className="px-5 py-3 text-xs text-muted-foreground">{new Date(r.updated_at).toLocaleDateString()}</td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No projects yet.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">No projects yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -612,7 +797,7 @@ function SharesPanel() {
     setLoading(true);
     try {
       const sb = await trySupabaseAdmin();
-      if (!sb) throw new Error("Supabase not configured");
+      if (!sb) throw new Error("Supabase admin client not available");
       const { data: rows, error: err } = await sb.from("timeseries_shares")
         .select("id, user_id, title, created_at").order("created_at", { ascending: false }).limit(500);
       if (err) throw new Error(err.message);
@@ -628,7 +813,7 @@ function SharesPanel() {
     if (!confirm("Delete this share permanently?")) return;
     try {
       const sb = await trySupabaseAdmin();
-      if (!sb) throw new Error("Supabase not configured");
+      if (!sb) throw new Error("Supabase admin client not available");
       const { error } = await sb.from("timeseries_shares").delete().eq("id", id);
       if (error) throw new Error(error.message);
       toast.success("Share deleted");
@@ -645,38 +830,38 @@ function SharesPanel() {
   const rows = data ?? [];
 
   return (
-    <div className="glass overflow-hidden rounded-xl border border-border/40">
+    <div className="glass overflow-hidden rounded-2xl border border-border/40">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border/40 bg-muted/20 text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="px-4 py-3">Title</th>
-              <th className="px-4 py-3">Owner</th>
-              <th className="px-4 py-3">Created</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="px-5 py-3">Title</th>
+              <th className="px-5 py-3">Owner</th>
+              <th className="px-5 py-3">Created</th>
+              <th className="px-5 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-b border-border/20 hover:bg-muted/10">
-                <td className="px-4 py-3 font-medium">{r.title}</td>
-                <td className="px-4 py-3 font-mono text-[10px] text-muted-foreground">{r.user_id.slice(0, 8)}</td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</td>
-                <td className="px-4 py-3">
+              <tr key={r.id} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
+                <td className="px-5 py-3 font-medium">{r.title}</td>
+                <td className="px-5 py-3 font-mono text-[10px] text-muted-foreground">{r.user_id.slice(0, 8)}</td>
+                <td className="px-5 py-3 text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</td>
+                <td className="px-5 py-3">
                   <div className="flex justify-end gap-2">
                     <a href={`/share/timeseries/${r.id}`} target="_blank" rel="noreferrer"
-                      className="glass flex items-center gap-1 rounded-md px-2 py-1 text-xs">
+                      className="glass flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:text-primary transition-colors">
                       <ExternalLink className="h-3 w-3" /> Open
                     </a>
                     <button onClick={() => handleDelete(r.id)}
-                      className="glass flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:text-destructive">
+                      className="glass flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:text-destructive transition-colors">
                       <Trash2 className="h-3 w-3" /> Delete
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No shared time-series yet.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={4} className="px-5 py-10 text-center text-muted-foreground">No shared time-series yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -685,24 +870,56 @@ function SharesPanel() {
 }
 
 // ─── Shared components ────────────────────────────────────────────────────────
-function StatCard({ label, value, icon }: { label: string; value: string | number; icon?: React.ReactNode }) {
+type ColorKey = "primary" | "green" | "blue" | "orange";
+
+const COLOR_MAP: Record<ColorKey, string> = {
+  primary: "text-primary",
+  green:   "text-green-400",
+  blue:    "text-blue-400",
+  orange:  "text-orange-400",
+};
+
+const BG_MAP: Record<ColorKey, string> = {
+  primary: "bg-primary/10",
+  green:   "bg-green-500/10",
+  blue:    "bg-blue-500/10",
+  orange:  "bg-orange-500/10",
+};
+
+function StatCard({
+  label, value, icon, color = "primary",
+}: {
+  label: string;
+  value: string | number;
+  icon?: React.ReactNode;
+  color?: ColorKey;
+}) {
   return (
-    <div className="glass rounded-xl border border-border/40 p-4">
+    <div className="glass rounded-2xl border border-border/40 p-4">
       <div className="flex items-center justify-between">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-        {icon}
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+        {icon && (
+          <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${BG_MAP[color]}`}>
+            <span className={COLOR_MAP[color]}>{icon}</span>
+          </div>
+        )}
       </div>
-      <div className="mt-2 text-2xl font-bold" style={{ fontFamily: "Space Grotesk" }}>{value}</div>
+      <div className="mt-3 text-2xl font-bold" style={{ fontFamily: "Space Grotesk" }}>{value}</div>
     </div>
   );
 }
 
 function PanelLoader() {
-  return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
+  return (
+    <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+    </div>
+  );
 }
+
 function PanelError({ err }: { err: unknown }) {
   return (
-    <div className="glass rounded-xl border border-destructive/40 p-4 text-sm text-destructive">
+    <div className="glass rounded-2xl border border-destructive/40 p-5 text-sm text-destructive">
       {err instanceof Error ? err.message : String(err)}
     </div>
   );
