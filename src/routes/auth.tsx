@@ -17,11 +17,29 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Surface OAuth errors returned in the URL (e.g. access_denied, redirect mismatch)
+    // Surface OAuth errors returned in the URL (e.g. access_denied, redirect mismatch).
+    // Route them to the dedicated /auth/error page for a clear message + retry.
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const search = new URLSearchParams(window.location.search);
-    const err = hash.get("error_description") || search.get("error_description") || search.get("error");
-    if (err) toast.error(decodeURIComponent(err.replace(/\+/g, " ")));
+    const err =
+      hash.get("error") ||
+      hash.get("error_description") ||
+      search.get("error") ||
+      search.get("error_description");
+    if (err) {
+      const params = new URLSearchParams();
+      const forward = (k: string) => {
+        const v = hash.get(k) || search.get(k);
+        if (v) params.set(k, v.replace(/\+/g, " "));
+      };
+      forward("error");
+      forward("error_code");
+      forward("error_description");
+      forward("provider");
+      window.history.replaceState(null, "", `/auth/error?${params.toString()}`);
+      navigate({ to: "/auth/error", search: Object.fromEntries(params) as never });
+      return;
+    }
 
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/dashboard" });
@@ -53,7 +71,12 @@ function AuthPage() {
         if (error) throw error;
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Authentication failed");
+      const message = err instanceof Error ? err.message : "Authentication failed";
+      toast.error(message);
+      navigate({
+        to: "/auth/error",
+        search: { error: "email_auth_failed", error_description: message, provider: "email" } as never,
+      });
     } finally {
       setLoading(false);
     }
@@ -68,6 +91,14 @@ function AuthPage() {
     if (error) {
       toast.error(error.message || "Google sign-in failed");
       setLoading(false);
+      navigate({
+        to: "/auth/error",
+        search: {
+          error: "oauth_start_failed",
+          error_description: error.message || "Google sign-in failed",
+          provider: "google",
+        } as never,
+      });
     }
   };
 
@@ -80,6 +111,14 @@ function AuthPage() {
     if (error) {
       toast.error(error.message || "Apple sign-in failed");
       setLoading(false);
+      navigate({
+        to: "/auth/error",
+        search: {
+          error: "oauth_start_failed",
+          error_description: error.message || "Apple sign-in failed",
+          provider: "apple",
+        } as never,
+      });
     }
   };
 
