@@ -10,12 +10,54 @@ const InputSchema = z.object({
   datasetContext: z.string().max(4000).optional(),
 });
 
+const FREE_LIMIT = 5;
+
+export const getAiUsage = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [{ data: usage }, { data: roles }] = await Promise.all([
+      supabaseAdmin.from("ai_usage").select("count").eq("user_id", context.userId).maybeSingle(),
+      supabaseAdmin.from("user_roles").select("role").eq("user_id", context.userId),
+    ]);
+    const isPremium = (roles ?? []).some((r: { role: string }) => r.role === "premium" || r.role === "admin");
+    const count = usage?.count ?? 0;
+    return {
+      count,
+      limit: FREE_LIMIT,
+      isPremium,
+      remaining: isPremium ? null : Math.max(0, FREE_LIMIT - count),
+    };
+  });
+
 export const chatWithSatVision = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => InputSchema.parse(input))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("LOVABLE_API_KEY not configured");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: roles } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId);
+    const isPremium = (roles ?? []).some(
+      (r: { role: string }) => r.role === "premium" || r.role === "admin",
+    );
+
+    const { data: usage } = await supabaseAdmin
+      .from("ai_usage")
+      .select("count")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const currentCount = usage?.count ?? 0;
+
+    if (!isPremium && currentCount >= FREE_LIMIT) {
+      throw new Error(
+        `Free plan limit reached (${FREE_LIMIT} AI messages). Upgrade to Premium for unlimited AI assistance.`,
+      );
+    }
 
     const systemPrompt = `You are SatVision AI, an expert remote-sensing and geospatial analyst.
 You help users interpret satellite datasets, NDVI/NDWI, cloud coverage, vegetation and water indices,
@@ -42,5 +84,19 @@ ${data.datasetContext ? `\n\nCurrent dataset context:\n${data.datasetContext}` :
     }
     const json = await res.json();
     const reply = json.choices?.[0]?.message?.content ?? "";
-    return { reply };
+
+    const newCount = currentCount + 1;
+    await supabaseAdmin
+      .from("ai_usage")
+      .upsert({ user_id: context.userId, count: newCount, updated_at: new Date().toISOString() });
+
+    return {
+      reply,
+      usage: {
+        count: newCount,
+        limit: FREE_LIMIT,
+        isPremium,
+        remaining: isPremium ? null : Math.max(0, FREE_LIMIT - newCount),
+      },
+    };
   });
