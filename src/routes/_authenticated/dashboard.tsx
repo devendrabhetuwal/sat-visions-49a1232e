@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
 import {
   loadGeoTiff,
   computeIndex,
@@ -212,8 +211,8 @@ function Dashboard() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
+  const signOut = () => {
+    localStorage.removeItem("admin_session");
     navigate({ to: "/" });
   };
 
