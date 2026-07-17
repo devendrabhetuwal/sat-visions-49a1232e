@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UserAuthRouteImport } from './routes/user-auth'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as ContactRouteImport } from './routes/contact'
@@ -24,6 +25,11 @@ import { Route as AuthenticatedAnalysisRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ShareTimeseriesIdRouteImport } from './routes/share.timeseries.$id'
 
+const UserAuthRoute = UserAuthRouteImport.update({
+  id: '/user-auth',
+  path: '/user-auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PricingRoute = PricingRouteImport.update({
   id: '/pricing',
   path: '/pricing',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
+  '/user-auth': typeof UserAuthRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analysis': typeof AuthenticatedAnalysisRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
+  '/user-auth': typeof UserAuthRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analysis': typeof AuthenticatedAnalysisRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
+  '/user-auth': typeof UserAuthRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/analysis': typeof AuthenticatedAnalysisRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/docs'
     | '/pricing'
+    | '/user-auth'
     | '/admin'
     | '/analysis'
     | '/dashboard'
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/docs'
     | '/pricing'
+    | '/user-auth'
     | '/admin'
     | '/analysis'
     | '/dashboard'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/docs'
     | '/pricing'
+    | '/user-auth'
     | '/_authenticated/admin'
     | '/_authenticated/analysis'
     | '/_authenticated/dashboard'
@@ -198,11 +210,19 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   DocsRoute: typeof DocsRoute
   PricingRoute: typeof PricingRoute
+  UserAuthRoute: typeof UserAuthRoute
   ShareTimeseriesIdRoute: typeof ShareTimeseriesIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/user-auth': {
+      id: '/user-auth'
+      path: '/user-auth'
+      fullPath: '/user-auth'
+      preLoaderRoute: typeof UserAuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/pricing': {
       id: '/pricing'
       path: '/pricing'
@@ -341,6 +361,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   DocsRoute: DocsRoute,
   PricingRoute: PricingRoute,
+  UserAuthRoute: UserAuthRoute,
   ShareTimeseriesIdRoute: ShareTimeseriesIdRoute,
 }
 export const routeTree = rootRouteImport

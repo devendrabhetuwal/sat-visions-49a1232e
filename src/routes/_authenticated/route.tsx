@@ -5,9 +5,10 @@ export const Route = createFileRoute("/_authenticated")({
   beforeLoad: () => {
     if (typeof window !== "undefined") {
       const isAdmin = localStorage.getItem("admin_session") === "true";
-      if (!isAdmin) throw redirect({ to: "/auth" });
+      const isUser = localStorage.getItem("user_session") === "true";
+      if (!isAdmin && !isUser) throw redirect({ to: "/user-auth" });
     }
-    return { user: { id: "admin", email: "admin" } };
+    return { user: { id: "session", email: "user" } };
   },
   component: () => <Outlet />,
 });

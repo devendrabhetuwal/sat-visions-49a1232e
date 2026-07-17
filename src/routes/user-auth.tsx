@@ -1,16 +1,28 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { Satellite, Loader2, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Satellite, Loader2, Eye, EyeOff, User } from "lucide-react";
 
-export const Route = createFileRoute("/auth")({
+export const Route = createFileRoute("/user-auth")({
   ssr: false,
-  component: AdminLoginPage,
+  component: UserAuthPage,
 });
 
-const ADMIN_USERNAME = "1234";
-const ADMIN_PASSWORD = "2065";
+const USER_USERNAME = "SATVISION";
+const USER_PASSWORD = "SATVISION";
 
-function AdminLoginPage() {
+function recordLoginEvent(type: "admin" | "user", username: string) {
+  try {
+    const raw = localStorage.getItem("login_events");
+    const events: { type: string; username: string; time: number }[] = raw ? JSON.parse(raw) : [];
+    events.push({ type, username, time: Date.now() });
+    // Keep last 500 events
+    localStorage.setItem("login_events", JSON.stringify(events.slice(-500)));
+  } catch {}
+}
+
+export { recordLoginEvent };
+
+function UserAuthPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -18,22 +30,20 @@ function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (localStorage.getItem("user_session") === "true" || localStorage.getItem("admin_session") === "true") {
+      navigate({ to: "/dashboard" });
+    }
+  }, [navigate]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-
-    // Small delay for UX feel
     setTimeout(() => {
-      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-        localStorage.setItem("admin_session", "true");
-        // Record login event for admin panel tracking
-        try {
-          const raw = localStorage.getItem("login_events");
-          const events: { type: string; username: string; time: number }[] = raw ? JSON.parse(raw) : [];
-          events.push({ type: "admin", username: "Admin", time: Date.now() });
-          localStorage.setItem("login_events", JSON.stringify(events.slice(-500)));
-        } catch {}
+      if (username.toUpperCase() === USER_USERNAME && password === USER_PASSWORD) {
+        localStorage.setItem("user_session", "true");
+        recordLoginEvent("user", username);
         navigate({ to: "/dashboard" });
       } else {
         setError("Invalid username or password.");
@@ -47,14 +57,12 @@ function AdminLoginPage() {
       className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
       style={{ background: "var(--background)" }}
     >
-      {/* Background glow */}
       <div
         className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[480px] -translate-x-1/2 rounded-full opacity-20 blur-[120px]"
         style={{ background: "var(--gradient-primary)" }}
       />
 
       <div className="relative z-10 w-full max-w-sm">
-        {/* Logo */}
         <Link to="/" className="mb-8 flex items-center justify-center gap-2">
           <div
             className="flex h-10 w-10 items-center justify-center rounded-xl shadow-lg"
@@ -67,7 +75,6 @@ function AdminLoginPage() {
           </span>
         </Link>
 
-        {/* Card */}
         <div
           className="rounded-2xl border p-8 shadow-2xl"
           style={{
@@ -76,30 +83,27 @@ function AdminLoginPage() {
             backdropFilter: "blur(20px)",
           }}
         >
-          {/* Header */}
           <div className="mb-6 flex flex-col items-center gap-2">
             <div
               className="flex h-12 w-12 items-center justify-center rounded-2xl"
               style={{ background: "oklch(from var(--primary) l c h / 0.15)" }}
             >
-              <ShieldCheck className="h-6 w-6" style={{ color: "var(--primary)" }} />
+              <User className="h-6 w-6" style={{ color: "var(--primary)" }} />
             </div>
             <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "Space Grotesk" }}>
-              Admin Login
+              Sign In
             </h1>
             <p className="text-center text-xs" style={{ color: "var(--muted-foreground)" }}>
-              Restricted access — administrators only
+              Access SatVision AI workspace
             </p>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-center text-sm text-destructive">
               {error}
             </div>
           )}
 
-          {/* Form */}
           <form onSubmit={handleLogin} className="space-y-3">
             <div>
               <label className="mb-1.5 block text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
@@ -121,7 +125,6 @@ function AdminLoginPage() {
                 }}
               />
             </div>
-
             <div>
               <label className="mb-1.5 block text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
                 Password
@@ -156,20 +159,23 @@ function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center rounded-xl py-3 text-sm font-semibold text-white transition-all duration-200 hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center rounded-xl py-3 text-sm font-semibold text-white transition-all duration-200 hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
               style={{ background: "var(--gradient-primary)" }}
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
             </button>
           </form>
+
+          <div className="mt-4 text-center text-xs" style={{ color: "var(--muted-foreground)" }}>
+            Default credentials:{" "}
+            <span className="font-mono font-semibold">SATVISION / SATVISION</span>
+          </div>
         </div>
 
-        {/* Back to home */}
         <p className="mt-5 text-center text-xs" style={{ color: "var(--muted-foreground)" }}>
-          Not an admin?{" "}
-          <Link to="/" className="underline underline-offset-2 hover:opacity-80">
-            Go back home
-          </Link>
+          <Link to="/" className="underline underline-offset-2 hover:opacity-80">← Back to home</Link>
+          {" · "}
+          <Link to="/auth" className="underline underline-offset-2 hover:opacity-80">Admin login</Link>
         </p>
       </div>
     </div>

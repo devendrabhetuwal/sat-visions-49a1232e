@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireAdminSession } from "@/integrations/supabase/no-auth-middleware";
 import { z } from "zod";
 
 const InputSchema = z.object({
@@ -16,11 +16,11 @@ const InputSchema = z.object({
 });
 
 export const generateAnalysisReport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => InputSchema.parse(input))
+  .middleware([requireAdminSession])
+  .validator((input: unknown) => InputSchema.parse(input))
   .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("LOVABLE_API_KEY not configured");
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) throw new Error("GEMINI_API_KEY is not configured. Add it to your environment variables.");
 
     const prompt = `Produce a professional remote-sensing analysis report in markdown.
 
@@ -38,23 +38,24 @@ Dataset context:
 ${data.datasetContext}
 ${data.stats ? `\nStatistics: min=${data.stats.min.toFixed(3)}, max=${data.stats.max.toFixed(3)}, mean=${data.stats.mean.toFixed(3)}, valid pixels=${data.stats.count}` : ""}`;
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "You are SatVision AI, an expert remote-sensing analyst. Write clear, evidence-based markdown reports." },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: "You are SatVision AI, an expert remote-sensing analyst. Write clear, evidence-based markdown reports." }],
+          },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 3000 },
+        }),
+      }
+    );
+
     if (res.status === 429) throw new Error("AI rate limit reached. Try again shortly.");
-    if (res.status === 402) throw new Error("AI credits exhausted. Add credits in your workspace.");
-    if (!res.ok) throw new Error(`AI error ${res.status}`);
+    if (!res.ok) throw new Error(`Gemini error ${res.status}`);
     const json = await res.json();
-    return { report: (json.choices?.[0]?.message?.content as string) ?? "" };
+    const report = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    return { report };
   });
