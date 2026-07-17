@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UserAuthRouteImport } from './routes/user-auth'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as DocsRouteImport } from './routes/docs'
+import { Route as DataLabRouteImport } from './routes/data-lab'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AboutRouteImport } from './routes/about'
@@ -38,6 +39,11 @@ const PricingRoute = PricingRouteImport.update({
 const DocsRoute = DocsRouteImport.update({
   id: '/docs',
   path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataLabRoute = DataLabRouteImport.update({
+  id: '/data-lab',
+  path: '/data-lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRouteWithChildren
   '/contact': typeof ContactRoute
+  '/data-lab': typeof DataLabRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
   '/user-auth': typeof UserAuthRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRouteWithChildren
   '/contact': typeof ContactRoute
+  '/data-lab': typeof DataLabRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
   '/user-auth': typeof UserAuthRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRouteWithChildren
   '/contact': typeof ContactRoute
+  '/data-lab': typeof DataLabRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
   '/user-auth': typeof UserAuthRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/contact'
+    | '/data-lab'
     | '/docs'
     | '/pricing'
     | '/user-auth'
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/contact'
+    | '/data-lab'
     | '/docs'
     | '/pricing'
     | '/user-auth'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/contact'
+    | '/data-lab'
     | '/docs'
     | '/pricing'
     | '/user-auth'
@@ -208,6 +220,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   AuthRoute: typeof AuthRouteWithChildren
   ContactRoute: typeof ContactRoute
+  DataLabRoute: typeof DataLabRoute
   DocsRoute: typeof DocsRoute
   PricingRoute: typeof PricingRoute
   UserAuthRoute: typeof UserAuthRoute
@@ -235,6 +248,13 @@ declare module '@tanstack/react-router' {
       path: '/docs'
       fullPath: '/docs'
       preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/data-lab': {
+      id: '/data-lab'
+      path: '/data-lab'
+      fullPath: '/data-lab'
+      preLoaderRoute: typeof DataLabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -359,6 +379,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   AuthRoute: AuthRouteWithChildren,
   ContactRoute: ContactRoute,
+  DataLabRoute: DataLabRoute,
   DocsRoute: DocsRoute,
   PricingRoute: PricingRoute,
   UserAuthRoute: UserAuthRoute,

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Satellite, Sparkles, Map, Brain, Upload, LineChart, ArrowRight, FileText, Download, FolderOpen } from "lucide-react";
+import { Satellite, Sparkles, Map, Brain, Upload, LineChart, ArrowRight, FileText, Download, FolderOpen, FlaskConical } from "lucide-react";
 import heroEarth from "@/assets/hero-earth.jpg";
 import { MarketingFooter } from "./about";
 
@@ -35,6 +35,9 @@ function Landing() {
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
             <Link to="/about" activeProps={{ className: "text-foreground" }}>About</Link>
+            <Link to="/data-lab" activeProps={{ className: "text-foreground" }} className="flex items-center gap-1 hover:text-foreground transition-colors">
+              <FlaskConical className="h-3.5 w-3.5" /> Data Lab
+            </Link>
             <Link to="/docs" activeProps={{ className: "text-foreground" }}>Docs</Link>
             <Link to="/pricing" activeProps={{ className: "text-foreground" }}>Pricing</Link>
             <Link to="/contact" activeProps={{ className: "text-foreground" }}>Contact</Link>
