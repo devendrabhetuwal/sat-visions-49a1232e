@@ -19,5 +19,17 @@ export default defineConfig({
   vite: {
     // Replit does not support IPv6; override the host Lovable config sets (::) to IPv4
     server: { host: "0.0.0.0" },
+    // Explicitly inject Supabase env vars at build time so they're available
+    // client-side even when only the non-VITE_ versions are set in Vercel.
+    define: {
+      "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
+        process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || ""
+      ),
+      "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+        process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+          process.env.SUPABASE_PUBLISHABLE_KEY ||
+          ""
+      ),
+    },
   },
 });
