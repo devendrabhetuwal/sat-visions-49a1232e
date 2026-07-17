@@ -73,10 +73,6 @@ function AuthPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Authentication failed";
       toast.error(message);
-      navigate({
-        to: "/auth/error",
-        search: { error: "email_auth_failed", error_description: message, provider: "email" } as never,
-      });
     } finally {
       setLoading(false);
     }

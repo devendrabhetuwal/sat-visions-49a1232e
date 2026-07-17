@@ -34,6 +34,29 @@ The Lovable vite config hard-codes port 8080 with IPv6 (`::`) which Replit doesn
 | `src/routes/about.tsx` | `/about` |
 | `src/routes/share.timeseries.$id.tsx` | `/share/timeseries/:id` — public share link |
 
+## Vercel Deployment
+
+This app uses the **nitro `vercel` preset** (`vite.config.ts`). `npm run build` writes to `.vercel/output` (Vercel Build Output API v3) — Vercel picks this up automatically with no framework preset selected.
+
+### Steps to deploy on Vercel
+
+1. **Import the GitHub repo** into Vercel.
+2. In the Vercel project settings → **Framework Preset**: select **Other**.
+3. **Build command**: `npm run build` (already in `vercel.json`)
+4. **Environment variables** — add all four in Vercel → Settings → Environment Variables:
+   | Key | Value |
+   |-----|-------|
+   | `VITE_SUPABASE_URL` | your Supabase project URL |
+   | `VITE_SUPABASE_PUBLISHABLE_KEY` | your Supabase anon/publishable key |
+   | `SUPABASE_URL` | same as above (used server-side) |
+   | `SUPABASE_PUBLISHABLE_KEY` | same as above (used server-side) |
+5. **Supabase dashboard** → Auth → URL Configuration:
+   - Add `https://<your-vercel-domain>/auth` to **Redirect URLs**
+   - Add `https://<your-vercel-domain>` to **Site URL**
+6. Deploy — Vercel handles the rest.
+
+> The `.env` file in this repo has the Supabase anon key for local dev. Copy those values to Vercel env vars.
+
 ## User preferences
 
 - Keep the existing project structure and stack — do not restructure or migrate.
