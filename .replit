@@ -36,3 +36,13 @@ externalPort = 5000
 [[ports]]
 localPort = 8080
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+SUPABASE_PROJECT_ID = "nzkylbszgapmyjahkuuc"
+SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56a3lsYnN6Z2FwbXlqYWhrdXVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNjI5MTgsImV4cCI6MjA5OTgzODkxOH0.Z13Y627BzXlGpRxOxKRW0UmqAmW4PnwZtTyzdXJ84kQ"
+SUPABASE_URL = "https://nzkylbszgapmyjahkuuc.supabase.co"
+VITE_SUPABASE_PROJECT_ID = "nzkylbszgapmyjahkuuc"
+VITE_SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56a3lsYnN6Z2FwbXlqYWhrdXVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNjI5MTgsImV4cCI6MjA5OTgzODkxOH0.Z13Y627BzXlGpRxOxKRW0UmqAmW4PnwZtTyzdXJ84kQ"
+VITE_SUPABASE_URL = "https://nzkylbszgapmyjahkuuc.supabase.co"
