@@ -5,8 +5,10 @@ import {
   Loader2, Satellite, ExternalLink, Activity, Globe,
   TrendingUp, AlertTriangle, Flame, Wind, Waves,
   RefreshCw, Clock, BarChart3, LayoutDashboard, ChevronRight,
-  UserCircle2, LogIn, FlaskConical,
+  UserCircle2, LogIn, FlaskConical, Ban, CheckCircle2, Search,
+  MapPin, Wifi, Hash, Mail, CalendarDays, X,
 } from "lucide-react";
+import { listUsers, blockUser, unblockUser, type UserRecord } from "@/lib/user-registry";
 import { toast } from "sonner";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -638,88 +640,315 @@ function NasaPanel() {
 
 // ─── Users panel ──────────────────────────────────────────────────────────────
 function UsersPanel() {
-  const [data, setData] = useState<any[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [users, setUsers]           = useState<UserRecord[]>([]);
+  const [search, setSearch]         = useState("");
+  const [filter, setFilter]         = useState<"all" | "active" | "blocked">("all");
+  const [selected, setSelected]     = useState<UserRecord | null>(null);
+  const [blockReason, setBlockReason] = useState("");
+  const [confirming, setConfirming] = useState<string | null>(null); // uuid pending block confirm
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const sb = await trySupabaseAdmin();
-        if (!sb) throw new Error("Supabase admin client not available");
-        const { data: users, error: err } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
-        if (err) throw new Error(err.message);
-        const { data: roles } = await sb.from("user_roles").select("user_id, role");
-        const rolesByUser = new Map<string, string[]>();
-        for (const r of roles ?? []) {
-          const list = rolesByUser.get(r.user_id) ?? [];
-          list.push(r.role);
-          rolesByUser.set(r.user_id, list);
-        }
-        setData((users?.users ?? []).map((u: any) => ({
-          id: u.id, email: u.email ?? null, created_at: u.created_at,
-          last_sign_in_at: u.last_sign_in_at ?? null, email_confirmed_at: u.email_confirmed_at ?? null,
-          provider: u.app_metadata?.provider ?? "email",
-          roles: rolesByUser.get(u.id) ?? [],
-        })));
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load users");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const reload = () => setUsers(listUsers());
+  useEffect(() => { reload(); }, []);
 
-  if (loading) return <PanelLoader />;
-  if (error) return <PanelError err={error} />;
-  const users = data ?? [];
+  const now = Date.now();
+  const filtered = users.filter((u) => {
+    const q = search.toLowerCase();
+    const matchQ = !q || u.username.toLowerCase().includes(q) || u.ip.includes(q) ||
+      (u.email ?? "").toLowerCase().includes(q) || (u.country ?? "").toLowerCase().includes(q);
+    const matchF = filter === "all" || (filter === "blocked" ? u.blocked : !u.blocked);
+    return matchQ && matchF;
+  });
+
+  const total   = users.length;
+  const active  = users.filter((u) => !u.blocked).length;
+  const blocked = users.filter((u) => u.blocked).length;
+  const recent  = users.filter((u) => now - u.lastSeen < 86400000).length;
+
+  const doBlock = (uuid: string) => {
+    blockUser(uuid, blockReason || "Blocked by admin");
+    setBlockReason("");
+    setConfirming(null);
+    setSelected(null);
+    reload();
+    toast.success("User blocked");
+  };
+
+  const doUnblock = (uuid: string) => {
+    unblockUser(uuid);
+    reload();
+    toast.success("User unblocked");
+  };
 
   return (
     <div className="space-y-5">
+      {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Users"  value={users.length} icon={<Users className="h-4 w-4" />} color="primary" />
-        <StatCard label="Admins"       value={users.filter((u) => u.roles.includes("admin")).length} icon={<Shield className="h-4 w-4" />} color="orange" />
-        <StatCard label="Confirmed"    value={users.filter((u) => u.email_confirmed_at).length} icon={<Activity className="h-4 w-4" />} color="green" />
-        <StatCard label="Active 24h"   value={users.filter((u) => u.last_sign_in_at && Date.now() - new Date(u.last_sign_in_at).getTime() < 86400000).length} icon={<TrendingUp className="h-4 w-4" />} color="blue" />
+        <StatCard label="Total Users"  value={total}   icon={<Users className="h-4 w-4" />}         color="primary" />
+        <StatCard label="Active"       value={active}  icon={<CheckCircle2 className="h-4 w-4" />}   color="green" />
+        <StatCard label="Blocked"      value={blocked} icon={<Ban className="h-4 w-4" />}             color="orange" />
+        <StatCard label="Last 24 h"    value={recent}  icon={<TrendingUp className="h-4 w-4" />}      color="blue" />
       </div>
-      <div className="glass overflow-hidden rounded-2xl border border-border/40">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border/40 bg-muted/20 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-5 py-3">Email</th>
-                <th className="px-5 py-3">Provider</th>
-                <th className="px-5 py-3">Roles</th>
-                <th className="px-5 py-3">Joined</th>
-                <th className="px-5 py-3">Last sign-in</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
-                  <td className="px-5 py-3 font-medium">{u.email ?? "—"}</td>
-                  <td className="px-5 py-3 text-muted-foreground capitalize">{u.provider}</td>
-                  <td className="px-5 py-3">
-                    <div className="flex gap-1">
-                      {u.roles.map((r: string) => (
-                        <span key={r} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                          r === "admin" ? "bg-primary/20 text-primary" : "bg-muted/40 text-muted-foreground"
-                        }`}>{r}</span>
-                      ))}
-                      {u.roles.length === 0 && <span className="text-[11px] text-muted-foreground">user</span>}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</td>
-                  <td className="px-5 py-3 text-xs text-muted-foreground">{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : "Never"}</td>
-                </tr>
-              ))}
-              {users.length === 0 && <tr><td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">No users found.</td></tr>}
-            </tbody>
-          </table>
+
+      {/* Empty state — no Puter logins yet */}
+      {total === 0 && (
+        <div className="glass flex flex-col items-center justify-center gap-3 rounded-2xl border border-border/40 py-16 text-center">
+          <Users className="h-10 w-10 text-muted-foreground/30" />
+          <p className="font-medium text-muted-foreground">No Puter users yet</p>
+          <p className="max-w-xs text-xs text-muted-foreground">
+            Users appear here automatically the first time they sign in via Puter.js.
+            Their username, UUID, email, and IP address are captured at login.
+          </p>
         </div>
-      </div>
+      )}
+
+      {total > 0 && (
+        <>
+          {/* Search + filter bar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by username, email, IP, country…"
+                className="w-full rounded-xl border border-border bg-input py-2 pl-9 pr-4 text-sm outline-none focus:border-primary"
+                style={{ color: "var(--foreground)" }}
+              />
+            </div>
+            {(["all", "active", "blocked"] as const).map((f) => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`rounded-xl px-3 py-2 text-xs font-medium capitalize transition ${
+                  filter === f ? "bg-primary/20 text-primary" : "glass text-muted-foreground hover:text-foreground"
+                }`}>
+                {f}
+              </button>
+            ))}
+            <button onClick={reload} className="glass rounded-xl p-2 text-muted-foreground hover:text-primary transition">
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Table */}
+          <div className="glass overflow-hidden rounded-2xl border border-border/40">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border/40 bg-muted/20 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3">UUID</th>
+                    <th className="px-4 py-3">IP Address</th>
+                    <th className="px-4 py-3">Location</th>
+                    <th className="px-4 py-3">Logins</th>
+                    <th className="px-4 py-3">Last seen</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((u) => (
+                    <tr
+                      key={u.uuid}
+                      onClick={() => setSelected(u)}
+                      className={`cursor-pointer border-b border-border/20 transition-colors hover:bg-muted/10 ${u.blocked ? "opacity-60" : ""}`}
+                    >
+                      {/* User */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                            style={{ background: u.blocked ? "#6b7280" : "var(--gradient-primary)" }}
+                          >
+                            {u.username[0]?.toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{u.username}</p>
+                            {u.email && <p className="truncate text-[10px] text-muted-foreground">{u.email}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      {/* UUID */}
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {u.uuid.slice(0, 8)}…
+                        </span>
+                      </td>
+                      {/* IP */}
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs">{u.ip}</span>
+                      </td>
+                      {/* Location */}
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {u.city || u.country
+                          ? <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{[u.city, u.country].filter(Boolean).join(", ")}</span>
+                          : "—"}
+                      </td>
+                      {/* Logins */}
+                      <td className="px-4 py-3 text-center text-xs font-semibold text-primary">
+                        {u.loginCount}
+                      </td>
+                      {/* Last seen */}
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {timeAgo(u.lastSeen)}
+                      </td>
+                      {/* Status */}
+                      <td className="px-4 py-3">
+                        {u.blocked
+                          ? <span className="flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400"><Ban className="h-3 w-3" /> Blocked</span>
+                          : <span className="flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold text-green-400"><CheckCircle2 className="h-3 w-3" /> Active</span>}
+                      </td>
+                      {/* Actions */}
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        {u.blocked
+                          ? (
+                            <button onClick={() => doUnblock(u.uuid)}
+                              className="flex items-center gap-1 rounded-lg bg-green-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-green-400 hover:bg-green-500/20 transition">
+                              <CheckCircle2 className="h-3 w-3" /> Unblock
+                            </button>
+                          ) : (
+                            <button onClick={() => { setConfirming(u.uuid); setBlockReason(""); }}
+                              className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-red-400 hover:bg-red-500/20 transition">
+                              <Ban className="h-3 w-3" /> Block
+                            </button>
+                          )}
+                      </td>
+                    </tr>
+                  ))}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-muted-foreground">No users match your filter.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Block confirm modal ───────────────────────────────────────────── */}
+      {confirming && (() => {
+        const u = users.find((x) => x.uuid === confirming)!;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirming(null)} />
+            <div className="relative z-10 w-full max-w-sm rounded-2xl border border-border/60 p-6 shadow-2xl"
+              style={{ background: "var(--card)" }}>
+              <button onClick={() => setConfirming(null)} className="absolute right-4 top-4 text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15">
+                  <Ban className="h-5 w-5 text-red-400" />
+                </div>
+                <div>
+                  <p className="font-semibold">Block user?</p>
+                  <p className="text-xs text-muted-foreground">@{u?.username}</p>
+                </div>
+              </div>
+              <p className="mb-4 text-sm text-muted-foreground">
+                This user will be immediately prevented from signing in. You can unblock them at any time.
+              </p>
+              <div className="mb-4">
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Reason <span className="opacity-50">(optional)</span></label>
+                <input
+                  value={blockReason} onChange={(e) => setBlockReason(e.target.value)}
+                  placeholder="e.g. Abusive behaviour, spam…"
+                  className="w-full rounded-xl border border-border bg-input px-4 py-2.5 text-sm outline-none focus:border-red-400"
+                  style={{ color: "var(--foreground)" }}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirming(null)}
+                  className="flex-1 rounded-xl glass py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+                  Cancel
+                </button>
+                <button onClick={() => doBlock(confirming)}
+                  className="flex-1 rounded-xl bg-red-500/90 py-2.5 text-sm font-bold text-white hover:bg-red-500 transition">
+                  Block User
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── User detail drawer ────────────────────────────────────────────── */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-end p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelected(null)} />
+          <div className="relative z-10 flex h-full max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-2xl border border-border/60 shadow-2xl"
+            style={{ background: "var(--card)" }}>
+            {/* Header */}
+            <div className="relative overflow-hidden p-6 pb-4">
+              <div className="pointer-events-none absolute inset-0 opacity-10"
+                style={{ background: "var(--gradient-primary)" }} />
+              <button onClick={() => setSelected(null)}
+                className="absolute right-4 top-4 rounded-lg p-1.5 text-muted-foreground hover:bg-white/10">
+                <X className="h-4 w-4" />
+              </button>
+              <div className="relative flex items-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-black text-white shadow"
+                  style={{ background: selected.blocked ? "#6b7280" : "var(--gradient-primary)" }}>
+                  {selected.username[0]?.toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-lg font-bold" style={{ fontFamily: "Space Grotesk" }}>@{selected.username}</p>
+                  {selected.blocked
+                    ? <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-red-400"><Ban className="h-3 w-3" /> Blocked</span>
+                    : <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-green-400"><CheckCircle2 className="h-3 w-3" /> Active</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* Detail rows */}
+            <div className="flex-1 space-y-1 px-4 py-2">
+              {[
+                { icon: <Hash className="h-3.5 w-3.5" />,         label: "UUID",         value: selected.uuid },
+                { icon: <Mail className="h-3.5 w-3.5" />,         label: "Email",        value: selected.email ?? "—" },
+                { icon: <CheckCircle2 className="h-3.5 w-3.5" />, label: "Email verified",value: selected.email_confirmed ? "Yes ✓" : "Not verified" },
+                { icon: <Wifi className="h-3.5 w-3.5" />,         label: "IP address",   value: selected.ip },
+                { icon: <MapPin className="h-3.5 w-3.5" />,       label: "City",         value: selected.city ?? "—" },
+                { icon: <Globe className="h-3.5 w-3.5" />,        label: "Country",      value: selected.country ?? "—" },
+                { icon: <Activity className="h-3.5 w-3.5" />,     label: "ISP / Org",    value: selected.org ?? "—" },
+                { icon: <TrendingUp className="h-3.5 w-3.5" />,   label: "Total logins", value: String(selected.loginCount) },
+                { icon: <CalendarDays className="h-3.5 w-3.5" />, label: "First seen",   value: new Date(selected.firstSeen).toLocaleString() },
+                { icon: <Clock className="h-3.5 w-3.5" />,        label: "Last seen",    value: new Date(selected.lastSeen).toLocaleString() },
+                selected.blockedReason ? { icon: <Ban className="h-3.5 w-3.5" />, label: "Block reason", value: selected.blockedReason } : null,
+              ].filter(Boolean).map((row) => row && (
+                <div key={row.label} className="flex items-start gap-3 rounded-xl px-3 py-2 hover:bg-white/5">
+                  <span className="mt-0.5 shrink-0 text-muted-foreground">{row.icon}</span>
+                  <span className="w-28 shrink-0 text-xs text-muted-foreground">{row.label}</span>
+                  <span className="min-w-0 break-all text-xs font-medium">{row.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Action */}
+            <div className="border-t border-border/40 p-4">
+              {selected.blocked
+                ? (
+                  <button onClick={() => { doUnblock(selected.uuid); setSelected(null); }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-500/15 py-3 text-sm font-semibold text-green-400 hover:bg-green-500/25 transition">
+                    <CheckCircle2 className="h-4 w-4" /> Unblock User
+                  </button>
+                ) : (
+                  <button onClick={() => { setSelected(null); setConfirming(selected.uuid); setBlockReason(""); }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/15 py-3 text-sm font-semibold text-red-400 hover:bg-red-500/25 transition">
+                    <Ban className="h-4 w-4" /> Block User
+                  </button>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// ── Time-ago helper ────────────────────────────────────────────────────────────
+function timeAgo(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 60_000)    return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
 // ─── Projects panel ───────────────────────────────────────────────────────────

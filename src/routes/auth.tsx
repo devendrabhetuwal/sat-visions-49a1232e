@@ -4,6 +4,7 @@ import {
   Satellite, Loader2, Eye, EyeOff, ShieldCheck, User,
 } from "lucide-react";
 import { recordLoginEvent } from "./user-auth";
+import { fetchGeoIP, upsertUser, isUserBlocked } from "@/lib/user-registry";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -84,13 +85,29 @@ function LoginPage() {
     try {
       await window.puter.auth.signIn();
       const user = await window.puter.auth.getUser();
+
+      // Check block list before admitting the user
+      if (isUserBlocked(user.uuid)) {
+        try { await window.puter.auth.signOut(); } catch {}
+        setError("Your account has been blocked. Please contact the administrator.");
+        setPuterLoading(false);
+        return;
+      }
+
+      // Capture IP + geo in background (don't block login on failure)
+      const geo = await fetchGeoIP();
+      upsertUser(user, geo);
+
       localStorage.setItem("puter_session", "true");
       localStorage.setItem("user_session",  "true");
       localStorage.setItem("puter_user",    JSON.stringify(user));
       recordLoginEvent("user", user.username);
       navigate({ to: "/dashboard" });
-    } catch {
-      setError("Puter sign-in was cancelled or failed. Please try again.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "";
+      if (!msg.includes("blocked")) {
+        setError("Puter sign-in was cancelled or failed. Please try again.");
+      }
       setPuterLoading(false);
     }
   };
