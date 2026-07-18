@@ -19,7 +19,7 @@ import { saveProject } from "@/lib/projects.functions";
 import { generateAnalysisReport } from "@/lib/ai-report.functions";
 import { checkIsAdmin } from "@/lib/admin.functions";
 import { useQuery } from "@tanstack/react-query";
-import { Satellite, Upload, LogOut, Loader2, Layers, Info, Download, Save, FileText, FolderOpen, X, BarChart3, Shield, BookOpen, FlaskConical } from "lucide-react";
+import { Satellite, Upload, LogOut, Loader2, Layers, Info, Download, Save, FileText, FolderOpen, X, BarChart3, Shield, BookOpen, FlaskConical, User, Mail, Hash, CheckCircle, Clock, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -60,8 +60,33 @@ function Dashboard() {
 
   // Also treat localStorage admin_session as admin so the button always shows
   const [isLocalAdmin, setIsLocalAdmin] = useState(false);
+
+  // Puter user profile
+  interface PuterUser { username: string; uuid: string; email?: string; email_confirmed?: boolean; is_temp_user?: boolean; [k: string]: unknown; }
+  const [puterUser, setPuterUser] = useState<PuterUser | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const isPuterSession = typeof window !== "undefined" && localStorage.getItem("puter_session") === "true";
+
   useEffect(() => {
     setIsLocalAdmin(localStorage.getItem("admin_session") === "true");
+
+    // Load cached Puter user immediately, then refresh from API
+    if (typeof window !== "undefined" && localStorage.getItem("puter_session") === "true") {
+      const cached = localStorage.getItem("puter_user");
+      if (cached) { try { setPuterUser(JSON.parse(cached)); } catch {} }
+      // Refresh from live API when Puter is ready
+      const tryRefresh = () => {
+        if (typeof (window as any).puter !== "undefined") {
+          (window as any).puter.auth.getUser().then((u: PuterUser) => {
+            setPuterUser(u);
+            localStorage.setItem("puter_user", JSON.stringify(u));
+          }).catch(() => {});
+        } else {
+          setTimeout(tryRefresh, 800);
+        }
+      };
+      tryRefresh();
+    }
   }, []);
 
   const meta = tiff?.meta;
@@ -217,8 +242,19 @@ function Dashboard() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    // Puter sign-out if applicable
+    if (localStorage.getItem("puter_session") === "true") {
+      try {
+        if (typeof (window as any).puter !== "undefined") {
+          await (window as any).puter.auth.signOut();
+        }
+      } catch {}
+      localStorage.removeItem("puter_session");
+      localStorage.removeItem("puter_user");
+    }
     localStorage.removeItem("admin_session");
+    localStorage.removeItem("user_session");
     navigate({ to: "/" });
   };
 
@@ -274,12 +310,106 @@ function Dashboard() {
                 <Shield className="h-3.5 w-3.5" /> Admin
               </Link>
             )}
-            <button
-              onClick={signOut}
-              className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Sign out
-            </button>
+            {/* Puter profile button */}
+            {puterUser && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowProfile((v) => !v)}
+                  className="glass flex items-center gap-2 rounded-full py-1.5 pl-2 pr-3 text-xs font-medium hover:bg-white/5 border border-primary/30"
+                >
+                  {/* Avatar */}
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                    style={{ background: "var(--gradient-primary)" }}>
+                    {puterUser.username?.[0]?.toUpperCase() ?? "P"}
+                  </div>
+                  <span className="max-w-[80px] truncate">{puterUser.username}</span>
+                  <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${showProfile ? "rotate-180" : ""}`} />
+                </button>
+
+                {/* Profile dropdown */}
+                {showProfile && (
+                  <>
+                    {/* Backdrop */}
+                    <div className="fixed inset-0 z-40" onClick={() => setShowProfile(false)} />
+                    <div className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-border/60 shadow-2xl"
+                      style={{ background: "var(--card)", backdropFilter: "blur(20px)" }}>
+
+                      {/* Profile header */}
+                      <div className="relative overflow-hidden p-5 pb-4">
+                        <div className="pointer-events-none absolute inset-0 opacity-10"
+                          style={{ background: "var(--gradient-primary)" }} />
+                        <div className="relative flex items-center gap-3">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-black text-white shadow-lg"
+                            style={{ background: "var(--gradient-primary)" }}>
+                            {puterUser.username?.[0]?.toUpperCase() ?? "P"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-bold" style={{ fontFamily: "Space Grotesk" }}>
+                              {puterUser.username}
+                            </p>
+                            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                Puter Account
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Details */}
+                      <div className="space-y-1 px-3 py-2">
+                        {[
+                          { icon: <User className="h-3.5 w-3.5" />, label: "Username", value: puterUser.username },
+                          { icon: <Hash className="h-3.5 w-3.5" />, label: "UUID", value: (puterUser.uuid as string)?.slice(0, 18) + "…" },
+                          puterUser.email ? { icon: <Mail className="h-3.5 w-3.5" />, label: "Email", value: puterUser.email as string } : null,
+                          {
+                            icon: <CheckCircle className="h-3.5 w-3.5" />,
+                            label: "Email verified",
+                            value: puterUser.email_confirmed ? "Yes ✓" : "Not verified",
+                          },
+                          {
+                            icon: <Clock className="h-3.5 w-3.5" />,
+                            label: "Account type",
+                            value: puterUser.is_temp_user ? "Temporary" : "Full account",
+                          },
+                        ].filter(Boolean).map((row) => row && (
+                          <div key={row.label} className="flex items-center gap-2.5 rounded-xl px-3 py-2 hover:bg-white/5 transition-colors">
+                            <span className="shrink-0 text-muted-foreground">{row.icon}</span>
+                            <span className="w-24 shrink-0 text-xs text-muted-foreground">{row.label}</span>
+                            <span className="min-w-0 truncate text-xs font-medium">{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Puter badge */}
+                      <div className="mx-3 mb-3 mt-1 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Signed in via <span className="font-semibold text-primary">Puter.js</span> — 
+                          your identity is managed by <a href="https://puter.com" target="_blank" rel="noreferrer"
+                            className="underline hover:text-primary">puter.com</a>
+                        </p>
+                      </div>
+
+                      <div className="border-t border-border/40 p-3">
+                        <button onClick={signOut}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors">
+                          <LogOut className="h-3.5 w-3.5" /> Sign out
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {!puterUser && (
+              <button
+                onClick={signOut}
+                className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Sign out
+              </button>
+            )}
           </div>
         </div>
       </header>
