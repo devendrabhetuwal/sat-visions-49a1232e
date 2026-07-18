@@ -10,17 +10,14 @@ export const Route = createFileRoute("/user-auth")({
 const USER_USERNAME = "SATVISION";
 const USER_PASSWORD = "SATVISION";
 
-function recordLoginEvent(type: "admin" | "user", username: string) {
+export function recordLoginEvent(type: "admin" | "user", username: string) {
   try {
     const raw = localStorage.getItem("login_events");
     const events: { type: string; username: string; time: number }[] = raw ? JSON.parse(raw) : [];
     events.push({ type, username, time: Date.now() });
-    // Keep last 500 events
     localStorage.setItem("login_events", JSON.stringify(events.slice(-500)));
   } catch {}
 }
-
-export { recordLoginEvent };
 
 function UserAuthPage() {
   const navigate = useNavigate();
@@ -31,7 +28,10 @@ function UserAuthPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (localStorage.getItem("user_session") === "true" || localStorage.getItem("admin_session") === "true") {
+    if (
+      localStorage.getItem("user_session") === "true" ||
+      localStorage.getItem("admin_session") === "true"
+    ) {
       navigate({ to: "/dashboard" });
     }
   }, [navigate]);

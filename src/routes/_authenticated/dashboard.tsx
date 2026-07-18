@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   loadGeoTiff,
@@ -19,7 +19,7 @@ import { saveProject } from "@/lib/projects.functions";
 import { generateAnalysisReport } from "@/lib/ai-report.functions";
 import { checkIsAdmin } from "@/lib/admin.functions";
 import { useQuery } from "@tanstack/react-query";
-import { Satellite, Upload, LogOut, Loader2, Layers, Info, Download, Save, FileText, FolderOpen, X, BarChart3, Shield } from "lucide-react";
+import { Satellite, Upload, LogOut, Loader2, Layers, Info, Download, Save, FileText, FolderOpen, X, BarChart3, Shield, BookOpen, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -57,6 +57,12 @@ function Dashboard() {
     queryFn: () => isAdminFn(),
     staleTime: 60_000,
   });
+
+  // Also treat localStorage admin_session as admin so the button always shows
+  const [isLocalAdmin, setIsLocalAdmin] = useState(false);
+  useEffect(() => {
+    setIsLocalAdmin(localStorage.getItem("admin_session") === "true");
+  }, []);
 
   const meta = tiff?.meta;
 
@@ -254,7 +260,13 @@ function Dashboard() {
             <Link to="/timeseries" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5">
               <BarChart3 className="h-3.5 w-3.5" /> Time-series
             </Link>
-            {adminInfo?.isAdmin && (
+            <Link to="/research" className="glass flex items-center gap-2 rounded-full border-primary/30 px-4 py-1.5 text-xs font-medium hover:bg-white/5">
+              <BookOpen className="h-3.5 w-3.5" /> Research
+            </Link>
+            <Link to="/data-lab" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5">
+              <FlaskConical className="h-3.5 w-3.5" /> Data Lab
+            </Link>
+            {(adminInfo?.isAdmin || isLocalAdmin) && (
               <Link to="/admin" className="glass flex items-center gap-2 rounded-full border-primary/40 px-4 py-1.5 text-xs font-medium text-primary hover:bg-white/5">
                 <Shield className="h-3.5 w-3.5" /> Admin
               </Link>

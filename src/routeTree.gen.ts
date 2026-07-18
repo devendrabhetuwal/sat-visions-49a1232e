@@ -21,6 +21,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthErrorRouteImport } from './routes/auth.error'
 import { Route as AuthenticatedTimeseriesRouteImport } from './routes/_authenticated/timeseries'
+import { Route as AuthenticatedResearchRouteImport } from './routes/_authenticated/research'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAnalysisRouteImport } from './routes/_authenticated/analysis'
@@ -86,6 +87,11 @@ const AuthenticatedTimeseriesRoute = AuthenticatedTimeseriesRouteImport.update({
   path: '/timeseries',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedResearchRoute = AuthenticatedResearchRouteImport.update({
+  id: '/research',
+  path: '/research',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
@@ -126,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/analysis': typeof AuthenticatedAnalysisRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/projects': typeof AuthenticatedProjectsRoute
+  '/research': typeof AuthenticatedResearchRoute
   '/timeseries': typeof AuthenticatedTimeseriesRoute
   '/auth/error': typeof AuthErrorRoute
   '/share/timeseries/$id': typeof ShareTimeseriesIdRoute
@@ -144,6 +151,7 @@ export interface FileRoutesByTo {
   '/analysis': typeof AuthenticatedAnalysisRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/projects': typeof AuthenticatedProjectsRoute
+  '/research': typeof AuthenticatedResearchRoute
   '/timeseries': typeof AuthenticatedTimeseriesRoute
   '/auth/error': typeof AuthErrorRoute
   '/share/timeseries/$id': typeof ShareTimeseriesIdRoute
@@ -164,6 +172,7 @@ export interface FileRoutesById {
   '/_authenticated/analysis': typeof AuthenticatedAnalysisRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
+  '/_authenticated/research': typeof AuthenticatedResearchRoute
   '/_authenticated/timeseries': typeof AuthenticatedTimeseriesRoute
   '/auth/error': typeof AuthErrorRoute
   '/share/timeseries/$id': typeof ShareTimeseriesIdRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/analysis'
     | '/dashboard'
     | '/projects'
+    | '/research'
     | '/timeseries'
     | '/auth/error'
     | '/share/timeseries/$id'
@@ -202,6 +212,7 @@ export interface FileRouteTypes {
     | '/analysis'
     | '/dashboard'
     | '/projects'
+    | '/research'
     | '/timeseries'
     | '/auth/error'
     | '/share/timeseries/$id'
@@ -221,6 +232,7 @@ export interface FileRouteTypes {
     | '/_authenticated/analysis'
     | '/_authenticated/dashboard'
     | '/_authenticated/projects'
+    | '/_authenticated/research'
     | '/_authenticated/timeseries'
     | '/auth/error'
     | '/share/timeseries/$id'
@@ -326,6 +338,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTimeseriesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/research': {
+      id: '/_authenticated/research'
+      path: '/research'
+      fullPath: '/research'
+      preLoaderRoute: typeof AuthenticatedResearchRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/projects': {
       id: '/_authenticated/projects'
       path: '/projects'
@@ -369,6 +388,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalysisRoute: typeof AuthenticatedAnalysisRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
+  AuthenticatedResearchRoute: typeof AuthenticatedResearchRoute
   AuthenticatedTimeseriesRoute: typeof AuthenticatedTimeseriesRoute
 }
 
@@ -377,6 +397,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalysisRoute: AuthenticatedAnalysisRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
+  AuthenticatedResearchRoute: AuthenticatedResearchRoute,
   AuthenticatedTimeseriesRoute: AuthenticatedTimeseriesRoute,
 }
 

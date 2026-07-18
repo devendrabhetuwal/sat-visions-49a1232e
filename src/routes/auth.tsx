@@ -1,46 +1,77 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { Satellite, Loader2, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Satellite, Loader2, Eye, EyeOff, ShieldCheck, User } from "lucide-react";
+import { recordLoginEvent } from "./user-auth";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  component: AdminLoginPage,
+  component: LoginPage,
 });
 
 const ADMIN_USERNAME = "1234";
 const ADMIN_PASSWORD = "2065";
+const USER_USERNAME  = "SATVISION";
+const USER_PASSWORD  = "SATVISION";
 
-function AdminLoginPage() {
-  const navigate = useNavigate();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+type Tab = "user" | "admin";
+
+function LoginPage() {
+  const navigate  = useNavigate();
+  const [tab, setTab]               = useState<Tab>("user");
+  const [username, setUsername]     = useState("");
+  const [password, setPassword]     = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState("");
+
+  // If already logged in, skip straight to dashboard
+  useEffect(() => {
+    if (
+      localStorage.getItem("user_session")  === "true" ||
+      localStorage.getItem("admin_session") === "true"
+    ) {
+      navigate({ to: "/dashboard" });
+    }
+  }, [navigate]);
+
+  // Reset form whenever the tab changes
+  const switchTab = (next: Tab) => {
+    setTab(next);
+    setUsername("");
+    setPassword("");
+    setError("");
+    setShowPassword(false);
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    // Small delay for UX feel
     setTimeout(() => {
-      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-        localStorage.setItem("admin_session", "true");
-        // Record login event for admin panel tracking
-        try {
-          const raw = localStorage.getItem("login_events");
-          const events: { type: string; username: string; time: number }[] = raw ? JSON.parse(raw) : [];
-          events.push({ type: "admin", username: "Admin", time: Date.now() });
-          localStorage.setItem("login_events", JSON.stringify(events.slice(-500)));
-        } catch {}
-        navigate({ to: "/dashboard" });
+      if (tab === "admin") {
+        if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+          localStorage.setItem("admin_session", "true");
+          recordLoginEvent("admin", "Admin");
+          navigate({ to: "/dashboard" });
+        } else {
+          setError("Invalid admin credentials.");
+          setLoading(false);
+        }
       } else {
-        setError("Invalid username or password.");
-        setLoading(false);
+        if (username.toUpperCase() === USER_USERNAME && password === USER_PASSWORD) {
+          localStorage.setItem("user_session", "true");
+          recordLoginEvent("user", username);
+          navigate({ to: "/dashboard" });
+        } else {
+          setError("Invalid username or password.");
+          setLoading(false);
+        }
       }
     }, 400);
   };
+
+  const isAdmin = tab === "admin";
 
   return (
     <div
@@ -76,19 +107,49 @@ function AdminLoginPage() {
             backdropFilter: "blur(20px)",
           }}
         >
-          {/* Header */}
+          {/* Tab switcher */}
+          <div className="mb-6 flex rounded-xl border border-border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => switchTab("user")}
+              className={`flex flex-1 items-center justify-center gap-2 py-2.5 text-xs font-semibold transition-all ${
+                tab === "user"
+                  ? "text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              style={tab === "user" ? { background: "var(--gradient-primary)" } : {}}
+            >
+              <User className="h-3.5 w-3.5" /> User
+            </button>
+            <button
+              type="button"
+              onClick={() => switchTab("admin")}
+              className={`flex flex-1 items-center justify-center gap-2 py-2.5 text-xs font-semibold transition-all ${
+                tab === "admin"
+                  ? "text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              style={tab === "admin" ? { background: "var(--gradient-primary)" } : {}}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" /> Admin
+            </button>
+          </div>
+
+          {/* Icon + title */}
           <div className="mb-6 flex flex-col items-center gap-2">
             <div
               className="flex h-12 w-12 items-center justify-center rounded-2xl"
               style={{ background: "oklch(from var(--primary) l c h / 0.15)" }}
             >
-              <ShieldCheck className="h-6 w-6" style={{ color: "var(--primary)" }} />
+              {isAdmin
+                ? <ShieldCheck className="h-6 w-6" style={{ color: "var(--primary)" }} />
+                : <User        className="h-6 w-6" style={{ color: "var(--primary)" }} />}
             </div>
             <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "Space Grotesk" }}>
-              Admin Login
+              {isAdmin ? "Admin Login" : "Sign In"}
             </h1>
             <p className="text-center text-xs" style={{ color: "var(--muted-foreground)" }}>
-              Restricted access — administrators only
+              {isAdmin ? "Restricted access — administrators only" : "Access SatVision AI workspace"}
             </p>
           </div>
 
@@ -162,13 +223,20 @@ function AdminLoginPage() {
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
             </button>
           </form>
+
+          {/* Default credentials hint — user tab only */}
+          {!isAdmin && (
+            <div className="mt-4 text-center text-xs" style={{ color: "var(--muted-foreground)" }}>
+              Default credentials:{" "}
+              <span className="font-mono font-semibold">SATVISION / SATVISION</span>
+            </div>
+          )}
         </div>
 
-        {/* Back to home */}
+        {/* Footer link */}
         <p className="mt-5 text-center text-xs" style={{ color: "var(--muted-foreground)" }}>
-          Not an admin?{" "}
           <Link to="/" className="underline underline-offset-2 hover:opacity-80">
-            Go back home
+            ← Back to home
           </Link>
         </p>
       </div>
