@@ -4,22 +4,31 @@ import {
   Upload, Satellite, FlaskConical, BarChart3, Activity, Map as MapIcon,
   Layers, TrendingUp, AlertCircle, CheckCircle, Download, Copy,
   ChevronLeft, ChevronRight, Info, RefreshCw, FileText,
-  Thermometer, Zap, Globe, Filter, X, Eye,
+  Thermometer, Zap, Globe, Filter, X, Eye, Plus, Play, Trash2,
+  Loader2,
 } from "lucide-react";
 import {
   ComposedChart, LineChart, Line, BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
-  ReferenceArea, ResponsiveContainer, Scatter, ScatterChart,
+  ReferenceArea, ResponsiveContainer,
 } from "recharts";
 import { toast } from "sonner";
-import { parseFile } from "@/lib/tec/parser";
+import { parseFile, mergeParseResults } from "@/lib/tec/parser";
 import type { ParseResult, TECRecord } from "@/lib/tec/parser";
+import {
+  computeEpochBins, buildStationSeries, detectStormPhases,
+  buildHeatmap, tecToColor, STATION_COLORS,
+  computePrnRoti, mean, median, stdDev, type EpochBin,
+} from "@/lib/tec/calculations";
 
-// ─── Binary format detection & API upload ─────────────────────────────────────
-const RINEX_EXTS  = new Set([".rnx", ".obs", ".nav", ".o", ".n", ".g", ".l", ".p",
-  ".21o", ".22o", ".23o", ".24o", ".25o", ".21n", ".22n", ".23n", ".24n"]);
-const HDF5_EXTS   = new Set([".h5", ".hdf5", ".hdf", ".he5"]);
-const NETCDF_EXTS = new Set([".nc", ".cdf", ".nc4", ".netcdf"]);
+export const Route = createFileRoute("/tec-lab")({
+  component: TECLabPage,
+});
+
+// ─── Binary format detection & API upload ────────────────────────────────────
+const RINEX_EXTS  = new Set([".rnx",".obs",".nav",".o",".n",".g",".l",".p",".21o",".22o",".23o",".24o",".25o",".21n",".22n",".23n",".24n"]);
+const HDF5_EXTS   = new Set([".h5",".hdf5",".hdf",".he5"]);
+const NETCDF_EXTS = new Set([".nc",".cdf",".nc4",".netcdf"]);
 
 function getBinaryFormat(filename: string): "rinex" | "hdf5" | "netcdf" | null {
   const ext = "." + filename.split(".").pop()!.toLowerCase();
@@ -29,11 +38,7 @@ function getBinaryFormat(filename: string): "rinex" | "hdf5" | "netcdf" | null {
   return null;
 }
 
-async function uploadToPythonParser(
-  file: File,
-  fmt: "rinex" | "hdf5" | "netcdf",
-  onProgress: (p: number) => void,
-): Promise<string> {
+async function uploadToPythonParser(file: File, fmt: "rinex" | "hdf5" | "netcdf", onProgress: (p: number) => void): Promise<string> {
   onProgress(15);
   const form = new FormData();
   form.append("file", file);
@@ -47,15 +52,6 @@ async function uploadToPythonParser(
   onProgress(95);
   return json.csv as string;
 }
-import {
-  computeEpochBins, buildStationSeries, detectStormPhases,
-  buildHeatmap, tecToColor, STATION_COLORS,
-  computePrnRoti, mean, median, stdDev, type EpochBin,
-} from "@/lib/tec/calculations";
-
-export const Route = createFileRoute("/tec-lab")({
-  component: TECLabPage,
-});
 
 // ─── Demo data generator ─────────────────────────────────────────────────────
 function generateDemoData(): string {
@@ -65,14 +61,11 @@ function generateDemoData(): string {
   const prns = ["G01","G03","G05","G08","G10","G14","G17","G19","G22","G28"];
   const rows = ["datetime,station,prn,lat,lon,elevation,azimuth,sTEC,vTEC"];
   const base = new Date("2024-11-05T00:00:00Z");
-
   for (let m = 0; m < 1440; m += 15) {
     const ts = new Date(base.getTime() + m * 60000);
     const iso = ts.toISOString();
     const hour = ts.getUTCHours() + ts.getUTCMinutes() / 60;
-    // Storm onset at ~8 UT
     const stormFactor = hour >= 8 && hour <= 20 ? 1 + 0.8 * Math.sin((hour - 8) * Math.PI / 12) : 1;
-
     for (const sta of stations) {
       const baseTEC = 15 + 25 * Math.sin((hour - 6) * Math.PI / 12) * (stationLats[sta] > 50 ? 0.6 : 1);
       const activePrns = prns.slice(0, 4 + Math.floor(4 * Math.sin(hour * Math.PI / 12)));
@@ -90,18 +83,29 @@ function generateDemoData(): string {
   return rows.join("\n");
 }
 
-// ─── Types & constants ────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 type ViewMode = "tec" | "dual" | "delta" | "roti" | "slant" | "heatmap" | "map" | "summary";
+type FileStatus = "pending" | "processing" | "done" | "error";
+
+interface UploadedFile {
+  id: string;
+  file: File;
+  name: string;
+  shortLabel: string;   // e.g. "CHUR" extracted from filename
+  status: FileStatus;
+  result?: ParseResult;
+  error?: string;
+}
 
 const VIEWS: { id: ViewMode; label: string; icon: React.ReactNode; desc: string }[] = [
-  { id: "tec",     label: "Multi-Station TEC",   icon: <TrendingUp className="h-4 w-4" />,  desc: "Median TEC comparison" },
-  { id: "dual",    label: "Sat Count + sTEC",     icon: <BarChart3 className="h-4 w-4" />,   desc: "Dual-axis tracking" },
-  { id: "delta",   label: "ΔTEC Perturbation",    icon: <Activity className="h-4 w-4" />,    desc: "TEC − quiet baseline" },
-  { id: "roti",    label: "ROTI",                 icon: <Zap className="h-4 w-4" />,         desc: "Rate of TEC index" },
-  { id: "slant",   label: "Slant TEC",            icon: <Layers className="h-4 w-4" />,      desc: "Per-satellite sTEC" },
-  { id: "heatmap", label: "Daily Heatmap",        icon: <Thermometer className="h-4 w-4" />, desc: "Lat × Time × TEC" },
-  { id: "map",     label: "World Map",            icon: <Globe className="h-4 w-4" />,       desc: "Station locations" },
-  { id: "summary", label: "Summary",              icon: <Eye className="h-4 w-4" />,         desc: "Stats dashboard" },
+  { id: "tec",     label: "Multi-Station TEC",  icon: <TrendingUp className="h-4 w-4" />,  desc: "Median TEC comparison" },
+  { id: "dual",    label: "Sat Count + sTEC",    icon: <BarChart3 className="h-4 w-4" />,   desc: "Dual-axis tracking" },
+  { id: "delta",   label: "ΔTEC Perturbation",   icon: <Activity className="h-4 w-4" />,    desc: "TEC − quiet baseline" },
+  { id: "roti",    label: "ROTI",                icon: <Zap className="h-4 w-4" />,         desc: "Rate of TEC index" },
+  { id: "slant",   label: "Slant TEC",           icon: <Layers className="h-4 w-4" />,      desc: "Per-satellite sTEC" },
+  { id: "heatmap", label: "Daily Heatmap",       icon: <Thermometer className="h-4 w-4" />, desc: "Lat × Time × TEC" },
+  { id: "map",     label: "World Map",           icon: <Globe className="h-4 w-4" />,       desc: "Station locations" },
+  { id: "summary", label: "Summary",             icon: <Eye className="h-4 w-4" />,         desc: "Stats dashboard" },
 ];
 
 const CHART_STYLE = {
@@ -110,11 +114,10 @@ const CHART_STYLE = {
   tooltip: { contentStyle: { background: "hsl(222 47% 10%)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11, color: "#e2e8f0" } },
 };
 
-// ─── Tiny helpers ─────────────────────────────────────────────────────────────
 const fmt2 = (n: number) => (isNaN(n) ? "—" : n.toFixed(2));
 const fmtTime = (ts: number) => {
   const d = new Date(ts);
-  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  return `${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`;
 };
 const fmtEpoch = (ts: number | string) => {
   const d = new Date(typeof ts === "string" ? ts : ts);
@@ -125,8 +128,11 @@ function downloadCSV(data: object[], filename: string) {
   if (!data.length) return;
   const keys = Object.keys(data[0]);
   const csv = [keys.join(","), ...data.map(r => keys.map(k => (r as Record<string, unknown>)[k]).join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = filename; a.click();
+}
+
+function shortLabel(filename: string): string {
+  return filename.replace(/\.[^.]+$/, "").replace(/[^A-Z0-9]/gi, "_").toUpperCase().slice(0, 8) || "FILE";
 }
 
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
@@ -148,18 +154,15 @@ function TECTooltip({ active, payload, label }: { active?: boolean; payload?: { 
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 function TECLabPage() {
-  const [rawText, setRawText] = useState("");
-  const [filename, setFilename] = useState("");
-  const [parsed, setParsed] = useState<ParseResult | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [view, setView] = useState<ViewMode>("tec");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isDragging, setIsDragging] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [parsed, setParsed]               = useState<ParseResult | null>(null);
+  const [isAnalysing, setIsAnalysing]     = useState(false);
+  const [view, setView]                   = useState<ViewMode>("tec");
+  const [sidebarOpen, setSidebarOpen]     = useState(true);
+  const [isDragging, setIsDragging]       = useState(false);
   const [selectedStations, setSelectedStations] = useState<string[]>([]);
-  const [selectedPrns, setSelectedPrns] = useState<string[]>([]);
-  const [elevFilter, setElevFilter] = useState(0);
-  const [binMinutes, setBinMinutes] = useState(15);
+  const [elevFilter, setElevFilter]       = useState(0);
+  const [binMinutes, setBinMinutes]       = useState(15);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // ─── Computed data ──────────────────────────────────────────────────────────
@@ -167,33 +170,25 @@ function TECLabPage() {
     if (!parsed) return [];
     let recs = parsed.records;
     if (selectedStations.length) recs = recs.filter(r => selectedStations.includes(r.station));
-    if (selectedPrns.length) recs = recs.filter(r => selectedPrns.includes(r.prn));
     if (elevFilter > 0) recs = recs.filter(r => r.elevation >= elevFilter);
     return recs;
-  }, [parsed, selectedStations, selectedPrns, elevFilter]);
+  }, [parsed, selectedStations, elevFilter]);
 
-  const epochBins = useMemo(() => computeEpochBins(filteredRecords, binMinutes), [filteredRecords, binMinutes]);
+  const epochBins     = useMemo(() => computeEpochBins(filteredRecords, binMinutes), [filteredRecords, binMinutes]);
   const stationSeries = useMemo(() => {
     const stations = selectedStations.length ? selectedStations : (parsed?.stations ?? []);
     return buildStationSeries(epochBins, stations.slice(0, 10));
   }, [epochBins, selectedStations, parsed]);
   const stormPhases = useMemo(() => detectStormPhases(epochBins), [epochBins]);
-  const heatData = useMemo(() => buildHeatmap(filteredRecords), [filteredRecords]);
-  const prnRoti = useMemo(() => computePrnRoti(filteredRecords, 5), [filteredRecords]);
+  const heatData    = useMemo(() => buildHeatmap(filteredRecords), [filteredRecords]);
+  const prnRoti     = useMemo(() => computePrnRoti(filteredRecords, 5), [filteredRecords]);
 
-  // Chart data for dual-axis view
   const dualData = useMemo(() => {
     if (!stationSeries.length) return [];
     const primary = stationSeries[0]?.data ?? [];
-    return primary.map(d => ({
-      epoch: fmtEpoch(d.timestamp),
-      timestamp: d.timestamp,
-      medianTEC: d.medianTEC,
-      satCount: d.satCount,
-    }));
+    return primary.map(d => ({ epoch: fmtEpoch(d.timestamp), timestamp: d.timestamp, medianTEC: d.medianTEC, satCount: d.satCount }));
   }, [stationSeries]);
 
-  // ΔTEC data (all stations merged)
   const deltaData = useMemo(() => {
     const map = new Map<number, Record<string, number>>();
     for (const s of stationSeries) {
@@ -202,18 +197,14 @@ function TECLabPage() {
         map.get(d.timestamp)![s.station] = d.deltaTEC;
       }
     }
-    return [...map.values()].sort((a, b) => a.timestamp - b.timestamp).map(r => ({
-      ...r, epoch: fmtEpoch(r.timestamp),
-    }));
+    return [...map.values()].sort((a, b) => a.timestamp - b.timestamp).map(r => ({ ...r, epoch: fmtEpoch(r.timestamp) }));
   }, [stationSeries]);
 
-  // ROTI data (first station)
   const rotiData = useMemo(() => {
     const primary = stationSeries[0]?.data ?? [];
     return primary.map(d => ({ epoch: fmtEpoch(d.timestamp), timestamp: d.timestamp, roti: d.roti }));
   }, [stationSeries]);
 
-  // Slant TEC per PRN (for first station, limited PRNs)
   const slantData = useMemo(() => {
     const sta = selectedStations[0] ?? parsed?.stations[0];
     if (!sta) return { data: [], prns: [] as string[] };
@@ -221,94 +212,41 @@ function TECLabPage() {
     const binMs = binMinutes * 60000;
     const map = new Map<number, Record<string, number>>();
     for (const r of filteredRecords) {
-      if (r.station !== sta) continue;
-      if (!prns.includes(r.prn)) continue;
+      if (r.station !== sta || !prns.includes(r.prn)) continue;
       const bts = Math.floor(r.timestamp / binMs) * binMs;
       if (!map.has(bts)) map.set(bts, { timestamp: bts });
       const entry = map.get(bts)!;
-      if (!entry[r.prn]) entry[r.prn] = r.sTEC;
-      else entry[r.prn] = (entry[r.prn] + r.sTEC) / 2;
+      entry[r.prn] = entry[r.prn] !== undefined ? (entry[r.prn] + r.sTEC) / 2 : r.sTEC;
     }
-    const data = [...map.values()].sort((a, b) => a.timestamp - b.timestamp).map(r => ({
-      ...r, epoch: fmtEpoch(r.timestamp),
-    }));
+    const data = [...map.values()].sort((a, b) => a.timestamp - b.timestamp).map(r => ({ ...r, epoch: fmtEpoch(r.timestamp) }));
     return { data, prns };
   }, [filteredRecords, selectedStations, parsed, binMinutes]);
 
-  // Stats
   const globalStats = useMemo(() => {
-    const tecs = filteredRecords.map(r => r.vTEC).filter(v => v > 0);
+    const tecs = filteredRecords.map(r => r.vTEC).filter(v => v > 0 && isFinite(v));
     return {
       count: filteredRecords.length,
       stations: [...new Set(filteredRecords.map(r => r.station))].length,
       prns: [...new Set(filteredRecords.map(r => r.prn))].length,
-      meanTEC: mean(tecs),
-      medianTEC: median(tecs),
+      meanTEC: mean(tecs), medianTEC: median(tecs),
       maxTEC: tecs.length ? Math.max(...tecs) : 0,
       minTEC: tecs.length ? Math.min(...tecs) : 0,
       stdDevTEC: stdDev(tecs),
     };
   }, [filteredRecords]);
 
-  // ─── File processing ────────────────────────────────────────────────────────
-  const processText = useCallback((text: string, fname: string) => {
-    setIsProcessing(true); setProgress(10);
-    setTimeout(() => { setProgress(40); }, 100);
-    setTimeout(() => {
-      try {
-        const result = parseFile(text, fname);
-        setProgress(80);
-        setParsed(result);
-        setSelectedStations([]);
-        setSelectedPrns([]);
-        setTimeout(() => { setProgress(100); setIsProcessing(false); }, 200);
-        if (result.records.length > 0 || result.ionexMaps.length > 0) {
-          toast.success(`Loaded ${result.records.length.toLocaleString()} records from ${result.stations.length} station(s)`);
-        } else {
-          toast.error(result.warnings[0] ?? "No records found — check file format");
-        }
-      } catch (e) {
-        setIsProcessing(false); setProgress(0);
-        toast.error(e instanceof Error ? e.message : "Parse error");
-      }
-    }, 200);
-  }, []);
-
-  const handleFile = useCallback((file: File) => {
-    setFilename(file.name);
-    const binaryFmt = getBinaryFormat(file.name);
-
-    if (binaryFmt) {
-      // ── Binary format: send to Python backend ──────────────────────────────
-      setIsProcessing(true); setProgress(10);
-      uploadToPythonParser(file, binaryFmt, setProgress)
-        .then(csv => {
-          setRawText(csv);
-          processText(csv, file.name.replace(/\.[^.]+$/, ".csv"));
-        })
-        .catch(err => {
-          setIsProcessing(false); setProgress(0);
-          toast.error(`Parse error: ${err.message}`);
-        });
-    } else {
-      // ── Text format: parse in browser ──────────────────────────────────────
-      const reader = new FileReader();
-      reader.onload = e => {
-        const text = e.target?.result as string;
-        setRawText(text);
-        processText(text, file.name);
-      };
-      reader.readAsText(file);
+  const stationLocations = useMemo(() => {
+    const map = new Map<string, { lats: number[]; lons: number[]; tecs: number[] }>();
+    for (const r of filteredRecords) {
+      if (!r.lat || !r.lon) continue;
+      if (!map.has(r.station)) map.set(r.station, { lats: [], lons: [], tecs: [] });
+      const e = map.get(r.station)!;
+      e.lats.push(r.lat); e.lons.push(r.lon); e.tecs.push(r.vTEC);
     }
-  }, [processText]);
+    return [...map.entries()].map(([sta, d]) => ({ station: sta, lat: mean(d.lats), lon: mean(d.lons), medTEC: median(d.tecs) }));
+  }, [filteredRecords]);
 
-  const loadDemo = () => {
-    const csv = generateDemoData();
-    setRawText(csv); setFilename("demo_tec_2024-11-05.csv");
-    processText(csv, "demo_tec_2024-11-05.csv");
-  };
-
-  // ─── World map (lazy-loaded to avoid SSR issues) ────────────────────────────
+  // ─── Leaflet lazy-load ──────────────────────────────────────────────────────
   const [MapComponents, setMapComponents] = useState<{
     MapContainer: React.ComponentType<Record<string, unknown>>;
     TileLayer: React.ComponentType<Record<string, unknown>>;
@@ -319,29 +257,125 @@ function TECLabPage() {
   useEffect(() => {
     import("react-leaflet").then(m => {
       setMapComponents({
-        MapContainer: m.MapContainer as unknown as React.ComponentType<Record<string, unknown>>,
-        TileLayer: m.TileLayer as unknown as React.ComponentType<Record<string, unknown>>,
-        CircleMarker: m.CircleMarker as unknown as React.ComponentType<Record<string, unknown>>,
-        Popup: m.Popup as unknown as React.ComponentType<Record<string, unknown>>,
+        MapContainer:   m.MapContainer   as unknown as React.ComponentType<Record<string, unknown>>,
+        TileLayer:      m.TileLayer      as unknown as React.ComponentType<Record<string, unknown>>,
+        CircleMarker:   m.CircleMarker   as unknown as React.ComponentType<Record<string, unknown>>,
+        Popup:          m.Popup          as unknown as React.ComponentType<Record<string, unknown>>,
       });
     });
   }, []);
 
-  // Station lat/lon summary
-  const stationLocations = useMemo(() => {
-    const map = new Map<string, { lats: number[]; lons: number[]; tecs: number[] }>();
-    for (const r of filteredRecords) {
-      if (!r.lat || !r.lon) continue;
-      if (!map.has(r.station)) map.set(r.station, { lats: [], lons: [], tecs: [] });
-      const e = map.get(r.station)!;
-      e.lats.push(r.lat); e.lons.push(r.lon); e.tecs.push(r.vTEC);
-    }
-    return [...map.entries()].map(([sta, d]) => ({
-      station: sta,
-      lat: mean(d.lats), lon: mean(d.lons),
-      medTEC: median(d.tecs),
+  // ─── File handling ──────────────────────────────────────────────────────────
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const newEntries: UploadedFile[] = Array.from(files).map(f => ({
+      id: Math.random().toString(36).slice(2),
+      file: f,
+      name: f.name,
+      shortLabel: shortLabel(f.name),
+      status: "pending",
     }));
-  }, [filteredRecords]);
+    setUploadedFiles(prev => {
+      // Avoid exact filename duplicates
+      const existing = new Set(prev.map(e => e.name));
+      return [...prev, ...newEntries.filter(e => !existing.has(e.name))];
+    });
+  }, []);
+
+  const removeFile = useCallback((id: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  // ─── Create Analysis: parse all pending files then merge ───────────────────
+  const createAnalysis = useCallback(async () => {
+    const pending = uploadedFiles.filter(f => f.status === "pending" || f.status === "error");
+    if (!pending.length && uploadedFiles.length === 0) return;
+
+    setIsAnalysing(true);
+
+    // Process each file
+    const updated = [...uploadedFiles];
+
+    for (let i = 0; i < updated.length; i++) {
+      const entry = updated[i];
+      if (entry.status === "done") continue;
+
+      updated[i] = { ...entry, status: "processing" };
+      setUploadedFiles([...updated]);
+
+      try {
+        let text = "";
+        const binaryFmt = getBinaryFormat(entry.file.name);
+
+        if (binaryFmt) {
+          text = await uploadToPythonParser(entry.file, binaryFmt, () => {});
+        } else {
+          text = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target?.result as string);
+            reader.onerror = () => reject(new Error("File read error"));
+            reader.readAsText(entry.file);
+          });
+        }
+
+        const result = parseFile(text, entry.file.name);
+        updated[i] = { ...entry, status: "done", result };
+        setUploadedFiles([...updated]);
+      } catch (err) {
+        updated[i] = { ...entry, status: "error", error: err instanceof Error ? err.message : "Parse error" };
+        setUploadedFiles([...updated]);
+      }
+    }
+
+    // Merge all successful results
+    const done = updated.filter(f => f.status === "done" && f.result);
+    if (done.length === 0) {
+      toast.error("No files parsed successfully — check file format");
+      setIsAnalysing(false);
+      return;
+    }
+
+    const results   = done.map(f => f.result!);
+    const labels    = done.map(f => f.shortLabel);
+    const merged    = results.length === 1 ? results[0] : mergeParseResults(results, labels);
+
+    if (merged.records.length === 0 && merged.ionexMaps.length === 0) {
+      toast.error(merged.warnings[0] ?? "No TEC records found — check column names");
+    } else {
+      toast.success(`Analysis ready: ${merged.records.length.toLocaleString()} records · ${merged.stations.length} station(s) · ${merged.prns.length} PRN(s)`);
+    }
+
+    setParsed(merged);
+    setSelectedStations([]);
+    setView("tec");
+    setIsAnalysing(false);
+  }, [uploadedFiles]);
+
+  // ─── Demo loader ────────────────────────────────────────────────────────────
+  const loadDemo = () => {
+    const csv  = generateDemoData();
+    const blob = new Blob([csv], { type: "text/csv" });
+    const file = new File([blob], "demo_tec_2024-11-05.csv", { type: "text/csv" });
+    const entry: UploadedFile = {
+      id: "demo", file, name: file.name, shortLabel: "DEMO", status: "done",
+      result: parseFile(csv, file.name),
+    };
+    setUploadedFiles([entry]);
+    const result = entry.result!;
+    setParsed(result);
+    setSelectedStations([]);
+    setView("tec");
+    toast.success(`Demo loaded: ${result.records.length.toLocaleString()} records from ${result.stations.length} stations`);
+  };
+
+  // ─── Drag over entire sidebar ────────────────────────────────────────────────
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  }, [addFiles]);
+
+  const pendingCount = uploadedFiles.filter(f => f.status === "pending" || f.status === "error").length;
+  const doneCount    = uploadedFiles.filter(f => f.status === "done").length;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -370,70 +404,124 @@ function TECLabPage() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-        <aside className={`relative flex flex-col border-r border-border/40 bg-card/30 backdrop-blur transition-all duration-300 ${sidebarOpen ? "w-72 min-w-72" : "w-10 min-w-10"} overflow-hidden`}>
+        {/* ── Sidebar ──────────────────────────────────────────────────────── */}
+        <aside
+          onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          className={`relative flex flex-col border-r transition-all duration-300 ${isDragging ? "border-primary bg-primary/5" : "border-border/40 bg-card/30 backdrop-blur"} ${sidebarOpen ? "w-72 min-w-72" : "w-10 min-w-10"} overflow-hidden`}>
           <button
             onClick={() => setSidebarOpen(o => !o)}
-            className="absolute -right-3 top-4 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card shadow-md"
-          >
+            className="absolute -right-3 top-4 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card shadow-md">
             {sidebarOpen ? <ChevronLeft className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           </button>
 
           {sidebarOpen && (
-            <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-              {/* Upload */}
-              <div>
+            <div className="flex h-full flex-col gap-0 overflow-y-auto p-4 pb-6">
+
+              {/* ── Upload dropzone ─────────────────────────────────────── */}
+              <div className="mb-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Upload Dataset</p>
+
+                {/* Drop zone */}
                 <div
-                  onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={e => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                   onClick={() => fileRef.current?.click()}
-                  className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed py-5 text-center transition-all ${isDragging ? "border-primary bg-primary/10" : "border-border hover:border-primary/40"}`}
-                >
+                  className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed py-4 text-center transition-all ${isDragging ? "border-primary bg-primary/10" : "border-border hover:border-primary/40"}`}>
                   <Upload className="h-5 w-5 text-muted-foreground" />
-                  <p className="text-xs font-medium">Drop or click to upload</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight">CSV · TXT · IONEX · RINEX · HDF5 · NetCDF<br />Max 100 MB</p>
-                  <input ref={fileRef} type="file" accept=".csv,.txt,.dat,.ionex,.rnx,.obs,.nav,.o,.n,.h5,.hdf5,.hdf,.nc,.nc4,.cdf" className="hidden"
-                    onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
+                  <p className="text-xs font-medium">Drop files or click to add</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight">CSV · TXT · IONEX · RINEX · HDF5 · NetCDF<br />Multiple files supported · Max 100 MB each</p>
+                  <input ref={fileRef} type="file" multiple
+                    accept=".csv,.txt,.dat,.ionex,.rnx,.obs,.nav,.o,.n,.h5,.hdf5,.hdf,.nc,.nc4,.cdf"
+                    className="hidden"
+                    onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ""; }} />
                 </div>
 
-                {/* Progress */}
-                {isProcessing && (
-                  <div className="mt-3">
-                    <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
-                      <span>Processing…</span><span>{progress}%</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted/30">
-                      <div className="h-full rounded-full transition-all duration-300"
-                        style={{ width: `${progress}%`, background: "var(--gradient-primary)" }} />
-                    </div>
+                {/* File list */}
+                {uploadedFiles.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {uploadedFiles.map(f => (
+                      <div key={f.id} className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors
+                        ${f.status === "done" ? "bg-green-500/10 border border-green-500/20"
+                          : f.status === "error" ? "bg-red-500/10 border border-red-500/20"
+                          : f.status === "processing" ? "bg-primary/10 border border-primary/20"
+                          : "bg-muted/15 border border-border/30"}`}>
+                        {/* Status icon */}
+                        <span className="shrink-0">
+                          {f.status === "done"       && <CheckCircle className="h-3.5 w-3.5 text-green-400" />}
+                          {f.status === "error"      && <AlertCircle className="h-3.5 w-3.5 text-red-400" />}
+                          {f.status === "processing" && <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />}
+                          {f.status === "pending"    && <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate font-medium text-foreground/80">{f.name}</p>
+                          {f.status === "done" && f.result && (
+                            <p className="text-[10px] text-green-400">
+                              {f.result.records.length.toLocaleString()} records · {f.result.stations.length} sta
+                            </p>
+                          )}
+                          {f.status === "error" && (
+                            <p className="text-[10px] text-red-400 truncate">{f.error}</p>
+                          )}
+                          {f.status === "pending" && (
+                            <p className="text-[10px] text-muted-foreground">Ready to analyse</p>
+                          )}
+                        </div>
+                        <button onClick={() => removeFile(f.id)}
+                          className="shrink-0 rounded p-0.5 hover:bg-red-500/20 hover:text-red-400 transition-colors">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
 
-                {filename && !isProcessing && (
-                  <div className="mt-2 flex items-center gap-2 rounded-lg bg-muted/20 px-3 py-2 text-xs">
-                    <FileText className="h-3.5 w-3.5 text-primary" />
-                    <span className="truncate text-muted-foreground">{filename}</span>
-                  </div>
+                {/* Create Analysis button */}
+                {uploadedFiles.length > 0 && (
+                  <button
+                    onClick={createAnalysis}
+                    disabled={isAnalysing}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
+                    style={{ background: "var(--gradient-primary)" }}>
+                    {isAnalysing
+                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Analysing…</>
+                      : <><Play className="h-4 w-4" /> Create Analysis
+                        {pendingCount > 0 && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{pendingCount} new</span>}
+                      </>}
+                  </button>
+                )}
+
+                {/* No files — show demo shortcut */}
+                {uploadedFiles.length === 0 && (
+                  <button onClick={loadDemo}
+                    className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors">
+                    <FlaskConical className="h-3.5 w-3.5" /> Try demo dataset
+                  </button>
                 )}
               </div>
 
+              {/* ── Extraction report ───────────────────────────────────── */}
               {parsed && (
                 <>
-                  {/* Extraction Report */}
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Extraction Report</p>
+                  <div className="border-t border-border/30 pt-3 mt-1">
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Extraction Report</p>
+                      {doneCount > 1 && (
+                        <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] text-primary">{doneCount} files merged</span>
+                      )}
+                    </div>
                     <div className="glass space-y-1.5 rounded-xl p-3 text-xs">
-                      <SidebarKV label="Format" value={parsed.format.toUpperCase()} />
-                      <SidebarKV label="Valid records" value={parsed.records.length.toLocaleString()} />
-                      <SidebarKV label="Stations" value={parsed.stations.length.toString()} />
+                      <SidebarKV label="Format"         value={parsed.format.toUpperCase()} />
+                      <SidebarKV label="Valid records"  value={parsed.records.length.toLocaleString()} />
+                      <SidebarKV label="Stations"       value={parsed.stations.length.toString()} />
                       <SidebarKV label="Satellites (PRN)" value={parsed.prns.length.toString()} />
                       {parsed.extractionReport.tecRange[1] > 0 && (
-                        <SidebarKV label="TEC range" value={`${fmt2(parsed.extractionReport.tecRange[0])}–${fmt2(parsed.extractionReport.tecRange[1])} TECU`} />
+                        <SidebarKV label="TEC range"
+                          value={`${fmt2(parsed.extractionReport.tecRange[0])}–${fmt2(parsed.extractionReport.tecRange[1])} TECU`} />
                       )}
-                      <SidebarKV label="Time span" value={parsed.extractionReport.timeRange[0] !== "—"
-                        ? `${new Date(parsed.extractionReport.timeRange[0]).toUTCString().slice(5, 16)}` : "—"} />
+                      <SidebarKV label="Time span"
+                        value={parsed.extractionReport.timeRange[0] !== "—"
+                          ? new Date(parsed.extractionReport.timeRange[0]).toUTCString().slice(5, 16)
+                          : "—"} />
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Quality score</span>
                         <span className={`font-semibold ${parsed.extractionReport.qualityScore >= 70 ? "text-green-400" : parsed.extractionReport.qualityScore >= 40 ? "text-yellow-400" : "text-red-400"}`}>
@@ -444,9 +532,9 @@ function TECLabPage() {
                   </div>
 
                   {/* Warnings */}
-                  {parsed.warnings.length > 0 && (
-                    <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs space-y-1">
-                      {parsed.warnings.slice(0, 4).map((w, i) => (
+                  {parsed.warnings.filter(w => !w.includes("[")).slice(0, 4).length > 0 && (
+                    <div className="mt-2 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs space-y-1">
+                      {parsed.warnings.filter(w => !w.includes("[")).slice(0, 4).map((w, i) => (
                         <p key={i} className="flex items-start gap-1.5 text-yellow-300">
                           <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {w}
                         </p>
@@ -455,12 +543,11 @@ function TECLabPage() {
                   )}
 
                   {/* Filters */}
-                  <div>
+                  <div className="mt-3 border-t border-border/30 pt-3">
                     <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       <Filter className="h-3 w-3" /> Filters
                     </p>
 
-                    {/* Station filter */}
                     <div className="mb-3">
                       <p className="mb-1 text-[10px] text-muted-foreground">Stations ({parsed.stations.length})</p>
                       <div className="flex flex-wrap gap-1">
@@ -475,7 +562,6 @@ function TECLabPage() {
                       </div>
                     </div>
 
-                    {/* Elevation filter */}
                     <div className="mb-3">
                       <p className="mb-1 flex justify-between text-[10px] text-muted-foreground">
                         <span>Min elevation cutoff</span><span className="text-primary">{elevFilter}°</span>
@@ -485,7 +571,6 @@ function TECLabPage() {
                         className="w-full accent-primary" />
                     </div>
 
-                    {/* Bin size */}
                     <div>
                       <p className="mb-1 flex justify-between text-[10px] text-muted-foreground">
                         <span>Time bin</span><span className="text-primary">{binMinutes} min</span>
@@ -498,7 +583,7 @@ function TECLabPage() {
 
                   {/* Detected columns */}
                   {Object.keys(parsed.extractionReport.detectedColumns).length > 0 && (
-                    <div>
+                    <div className="mt-3 border-t border-border/30 pt-3">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Detected Columns</p>
                       <div className="glass space-y-1 rounded-xl p-3 text-xs">
                         {Object.entries(parsed.extractionReport.detectedColumns).map(([key, raw]) => (
@@ -513,10 +598,15 @@ function TECLabPage() {
           )}
         </aside>
 
-        {/* ── Main content ──────────────────────────────────────────────── */}
+        {/* ── Main content ───────────────────────────────────────────────── */}
         <main className="flex flex-1 flex-col overflow-hidden">
           {!parsed ? (
-            <EmptyState onLoadDemo={loadDemo} onUpload={() => fileRef.current?.click()} />
+            <EmptyState
+              onLoadDemo={loadDemo}
+              onUpload={() => fileRef.current?.click()}
+              hasFiles={uploadedFiles.length > 0}
+              onCreateAnalysis={createAnalysis}
+              isAnalysing={isAnalysing} />
           ) : (
             <>
               {/* View tabs */}
@@ -539,7 +629,7 @@ function TECLabPage() {
                   downloadCSV(data, `satvision_${view}_${Date.now()}.csv`);
                 }} />
 
-                {/* ── View 1: Multi-Station TEC ───────────────────────── */}
+                {/* Multi-Station TEC */}
                 {view === "tec" && (
                   <div className="glass rounded-2xl border border-border/40 p-5">
                     <ChartTitle title="Multi-Station Median TEC Comparison" unit="TECU" />
@@ -573,7 +663,7 @@ function TECLabPage() {
                   </div>
                 )}
 
-                {/* ── View 2: Dual-axis Sat Count + sTEC ─────────────── */}
+                {/* Sat Count + sTEC */}
                 {view === "dual" && (
                   <div className="glass rounded-2xl border border-border/40 p-5">
                     <ChartTitle title="GPS Satellite Tracking Count + Median sTEC" unit="" />
@@ -586,14 +676,14 @@ function TECLabPage() {
                         <YAxis yAxisId="count" orientation="right" tick={CHART_STYLE.axis} label={{ value: "Sat Count", angle: 90, position: "insideRight", style: { fontSize: 10, fill: "#ffd54f" } }} />
                         <Tooltip contentStyle={CHART_STYLE.tooltip.contentStyle} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Bar yAxisId="count" dataKey="satCount" name="Sat Count" fill="#ffd54f" opacity={0.7} radius={[2, 2, 0, 0]} />
+                        <Bar yAxisId="count" dataKey="satCount" name="Sat Count" fill="#ffd54f" opacity={0.7} radius={[2,2,0,0]} />
                         <Line yAxisId="tec" type="monotone" dataKey="medianTEC" name="Median sTEC" stroke="#4fc3f7" strokeWidth={2} dot={false} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                 )}
 
-                {/* ── View 3: ΔTEC Perturbation ───────────────────────── */}
+                {/* ΔTEC */}
                 {view === "delta" && (
                   <div className="glass rounded-2xl border border-border/40 p-5">
                     <ChartTitle title="ΔTEC Perturbation (TEC − Quiet-Day Baseline)" unit="TECU" />
@@ -620,11 +710,11 @@ function TECLabPage() {
                   </div>
                 )}
 
-                {/* ── View 4: ROTI ────────────────────────────────────── */}
+                {/* ROTI */}
                 {view === "roti" && (
                   <div className="glass rounded-2xl border border-border/40 p-5">
                     <ChartTitle title="ROTI — Rate of TEC Index" unit="TECU/min" />
-                    <p className="mb-3 text-xs text-muted-foreground">ROTI &gt; 0.5 TECU/min indicates ionospheric irregularities. Red dashed line = threshold.</p>
+                    <p className="mb-3 text-xs text-muted-foreground">ROTI &gt; 0.5 TECU/min indicates ionospheric irregularities</p>
                     <ResponsiveContainer width="100%" height={380}>
                       <ComposedChart data={rotiData}>
                         <CartesianGrid {...CHART_STYLE.cartesian} />
@@ -636,13 +726,13 @@ function TECLabPage() {
                           <ReferenceArea key={i} x1={fmtEpoch(p.start)} x2={fmtEpoch(p.end)}
                             fill={p.phase === "main" ? "rgba(239,68,68,0.1)" : "rgba(251,146,60,0.06)"} />
                         ))}
-                        <Bar dataKey="roti" name="ROTI" fill="#a78bfa" radius={[2, 2, 0, 0]} opacity={0.85} />
+                        <Bar dataKey="roti" name="ROTI" fill="#a78bfa" radius={[2,2,0,0]} opacity={0.85} />
                       </ComposedChart>
                     </ResponsiveContainer>
                     <div className="mt-3 grid grid-cols-3 gap-3">
                       {[
-                        { label: "Mean ROTI", value: fmt2(mean(rotiData.map(d => d.roti))) },
-                        { label: "Max ROTI", value: fmt2(Math.max(...rotiData.map(d => d.roti), 0)) },
+                        { label: "Mean ROTI",      value: fmt2(mean(rotiData.map(d => d.roti))) },
+                        { label: "Max ROTI",       value: fmt2(Math.max(...rotiData.map(d => d.roti), 0)) },
                         { label: "> 0.5 TECU/min", value: `${rotiData.filter(d => d.roti > 0.5).length} epochs` },
                       ].map(s => (
                         <div key={s.label} className="rounded-xl bg-muted/10 p-3 text-center">
@@ -654,7 +744,7 @@ function TECLabPage() {
                   </div>
                 )}
 
-                {/* ── View 5: Slant TEC per PRN ───────────────────────── */}
+                {/* Slant TEC */}
                 {view === "slant" && (
                   <div className="glass rounded-2xl border border-border/40 p-5">
                     <ChartTitle title={`Slant TEC — ${selectedStations[0] ?? parsed.stations[0] ?? "Station"}`} unit="TECU" />
@@ -675,28 +765,18 @@ function TECLabPage() {
                   </div>
                 )}
 
-                {/* ── View 6: Heatmap ─────────────────────────────────── */}
+                {/* Heatmap */}
                 {view === "heatmap" && <HeatmapView data={heatData} />}
 
-                {/* ── View 7: World Map ────────────────────────────────── */}
+                {/* World Map */}
                 {view === "map" && (
-                  <div className="glass rounded-2xl border border-border/40 overflow-hidden" style={{ height: 480 }}>
+                  <div className="glass rounded-2xl border border-border/40 overflow-hidden relative" style={{ height: 480 }}>
                     {MapComponents ? (
-                      <MapComponents.MapContainer
-                        center={[20, 0]} zoom={2} style={{ height: "100%", width: "100%", background: "#0d1117" }}
-                        attributionControl={false}
-                      >
-                        <MapComponents.TileLayer
-                          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                          attribution='&copy; OpenStreetMap &copy; CARTO'
-                        />
+                      <MapComponents.MapContainer center={[20, 0]} zoom={2} style={{ height: "100%", width: "100%", background: "#0d1117" }} attributionControl={false}>
+                        <MapComponents.TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OpenStreetMap &copy; CARTO' />
                         {stationLocations.map((s) => (
-                          <MapComponents.CircleMarker
-                            key={s.station}
-                            center={[s.lat, s.lon]}
-                            radius={10}
-                            pathOptions={{ color: "#4fc3f7", fillColor: "#4fc3f7", fillOpacity: 0.8, weight: 2 }}
-                          >
+                          <MapComponents.CircleMarker key={s.station} center={[s.lat, s.lon]} radius={10}
+                            pathOptions={{ color: "#4fc3f7", fillColor: "#4fc3f7", fillOpacity: 0.8, weight: 2 }}>
                             <MapComponents.Popup>
                               <div className="text-xs">
                                 <p className="font-bold">{s.station}</p>
@@ -713,26 +793,26 @@ function TECLabPage() {
                       </div>
                     )}
                     {stationLocations.length === 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <p className="text-xs text-muted-foreground bg-card/80 rounded-lg px-4 py-2">No station coordinates found in dataset</p>
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <p className="text-xs text-muted-foreground bg-card/80 rounded-lg px-4 py-2">No station coordinates in dataset</p>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* ── View 8: Summary ─────────────────────────────────── */}
+                {/* Summary */}
                 {view === "summary" && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       {[
                         { label: "Total Records", value: globalStats.count.toLocaleString(), unit: "" },
-                        { label: "Stations", value: globalStats.stations, unit: "" },
-                        { label: "Median TEC", value: fmt2(globalStats.medianTEC), unit: "TECU" },
-                        { label: "Max TEC", value: fmt2(globalStats.maxTEC), unit: "TECU" },
-                        { label: "Mean TEC", value: fmt2(globalStats.meanTEC), unit: "TECU" },
-                        { label: "Min TEC", value: fmt2(globalStats.minTEC), unit: "TECU" },
-                        { label: "Std Dev", value: fmt2(globalStats.stdDevTEC), unit: "TECU" },
-                        { label: "PRNs tracked", value: globalStats.prns, unit: "" },
+                        { label: "Stations",      value: globalStats.stations,               unit: "" },
+                        { label: "Median TEC",    value: fmt2(globalStats.medianTEC),        unit: "TECU" },
+                        { label: "Max TEC",       value: fmt2(globalStats.maxTEC),           unit: "TECU" },
+                        { label: "Mean TEC",      value: fmt2(globalStats.meanTEC),          unit: "TECU" },
+                        { label: "Min TEC",       value: fmt2(globalStats.minTEC),           unit: "TECU" },
+                        { label: "Std Dev",       value: fmt2(globalStats.stdDevTEC),        unit: "TECU" },
+                        { label: "PRNs tracked",  value: globalStats.prns,                   unit: "" },
                       ].map(s => (
                         <div key={s.label} className="glass rounded-xl border border-border/30 p-4 text-center">
                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</div>
@@ -742,7 +822,6 @@ function TECLabPage() {
                       ))}
                     </div>
 
-                    {/* Mini TEC chart */}
                     <div className="glass rounded-2xl border border-border/40 p-4">
                       <p className="mb-3 text-sm font-semibold">TEC Overview</p>
                       <ResponsiveContainer width="100%" height={200}>
@@ -759,20 +838,16 @@ function TECLabPage() {
                       </ResponsiveContainer>
                     </div>
 
-                    {/* Station breakdown table */}
                     <div className="glass overflow-hidden rounded-2xl border border-border/40">
                       <table className="w-full text-xs">
                         <thead className="border-b border-border/40 bg-muted/20 text-[10px] uppercase tracking-wider text-muted-foreground">
-                          <tr>
-                            {["Station", "Records", "PRNs", "Median TEC", "Max TEC", "Min TEC", "Std Dev", "Lat", "Lon"].map(h => (
-                              <th key={h} className="px-3 py-2 text-left">{h}</th>
-                            ))}
-                          </tr>
+                          <tr>{["Station","Records","PRNs","Median TEC","Max TEC","Min TEC","Std Dev","Lat","Lon"].map(h => (
+                            <th key={h} className="px-3 py-2 text-left">{h}</th>))}</tr>
                         </thead>
                         <tbody>
                           {(parsed?.stations ?? []).map((sta, si) => {
                             const stRecs = filteredRecords.filter(r => r.station === sta);
-                            const tecs = stRecs.map(r => r.vTEC).filter(v => v > 0);
+                            const tecs = stRecs.map(r => r.vTEC).filter(v => v > 0 && isFinite(v));
                             const loc = stationLocations.find(s => s.station === sta);
                             return (
                               <tr key={sta} className="border-b border-border/20 hover:bg-muted/10">
@@ -834,7 +909,10 @@ function ChartHeader({ view, bins, onExport }: { view: ViewMode; bins: EpochBin[
   );
 }
 
-function EmptyState({ onLoadDemo, onUpload }: { onLoadDemo: () => void; onUpload: () => void }) {
+function EmptyState({ onLoadDemo, onUpload, hasFiles, onCreateAnalysis, isAnalysing }: {
+  onLoadDemo: () => void; onUpload: () => void;
+  hasFiles: boolean; onCreateAnalysis: () => void; isAnalysing: boolean;
+}) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto">
       <div className="flex h-20 w-20 items-center justify-center rounded-2xl" style={{ background: "var(--gradient-primary)" }}>
@@ -843,27 +921,31 @@ function EmptyState({ onLoadDemo, onUpload }: { onLoadDemo: () => void; onUpload
       <div>
         <h2 className="text-2xl font-bold" style={{ fontFamily: "Space Grotesk" }}>GPS TEC Analysis Platform</h2>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Upload your own GPS/GNSS dataset to analyse it instantly — or explore with the built-in demo.
+          Upload one or more GPS/GNSS datasets, then click <strong>Create Analysis</strong> to generate all charts instantly.
         </p>
       </div>
 
-      {/* Capabilities */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs text-muted-foreground max-w-xl">
         {["Auto column detection", "Multi-station analysis", "ROTI + ΔTEC computation", "Storm phase detection",
-          "8 interactive charts", "IONEX map parsing", "Publication-quality output", "CSV/PNG export"].map(f => (
+          "8 interactive charts", "IONEX map parsing", "Multiple file merge", "CSV/PNG export"].map(f => (
           <div key={f} className="glass flex items-center gap-1.5 rounded-xl px-3 py-2">
             <CheckCircle className="h-3 w-3 shrink-0 text-green-400" /> {f}
           </div>
         ))}
       </div>
 
-      {/* CTA — primary: upload, secondary: demo */}
       <div className="flex flex-wrap gap-3 justify-center">
         <button onClick={onUpload}
           className="flex items-center gap-2 rounded-full px-7 py-3 text-sm font-semibold text-white transition-all hover:brightness-110 shadow-lg"
           style={{ background: "var(--gradient-primary)" }}>
           <Upload className="h-4 w-4" /> Upload Your File
         </button>
+        {hasFiles && (
+          <button onClick={onCreateAnalysis} disabled={isAnalysing}
+            className="flex items-center gap-2 rounded-full border border-primary px-7 py-3 text-sm font-semibold text-primary hover:bg-primary/10 transition disabled:opacity-60">
+            {isAnalysing ? <><Loader2 className="h-4 w-4 animate-spin" /> Analysing…</> : <><Play className="h-4 w-4" /> Create Analysis</>}
+          </button>
+        )}
         <button onClick={onLoadDemo}
           className="glass flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium hover:text-primary transition-colors">
           <FlaskConical className="h-4 w-4" /> Load Demo Dataset
@@ -871,10 +953,9 @@ function EmptyState({ onLoadDemo, onUpload }: { onLoadDemo: () => void; onUpload
       </div>
       <p className="text-xs text-muted-foreground -mt-3">
         <Info className="inline h-3.5 w-3.5 mr-1" />
-        CSV · TXT · IONEX · RINEX · HDF5 · NetCDF — all calculations run on your data, not on the demo
+        CSV · TXT · IONEX · RINEX · HDF5 · NetCDF · Upload multiple files to compare stations side-by-side
       </p>
 
-      {/* Format guide */}
       <div className="w-full max-w-2xl">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">All supported formats</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -882,10 +963,10 @@ function EmptyState({ onLoadDemo, onUpload }: { onLoadDemo: () => void; onUpload
             { fmt: "CSV / TSV",  ext: ".csv  .tsv  .dat", tag: "Browser", desc: "Any delimiter, auto-detected headers. Works with RTKLIB, TEQC, and custom GNSS loggers." },
             { fmt: "Plain text", ext: ".txt  .dat",        tag: "Browser", desc: "Space/tab-separated columns. Comment lines starting with #, %, or ! are skipped." },
             { fmt: "IONEX",      ext: ".ionex",            tag: "Browser", desc: "IGS global TEC maps. All versions with EXPONENT scaling parsed natively." },
-            { fmt: "RINEX Obs", ext: ".rnx  .obs  .##o",  tag: "Python",  desc: "GPS/GNSS observation files. TEC computed from dual-frequency pseudoranges (P1/P2, C1/C2)." },
-            { fmt: "RINEX Nav", ext: ".nav  .##n  .##g",  tag: "Python",  desc: "Navigation/broadcast ephemeris files parsed via georinex." },
-            { fmt: "HDF5",      ext: ".h5  .hdf5  .hdf",  tag: "Python",  desc: "Scientific data containers. TEC variables auto-detected by name pattern." },
-            { fmt: "NetCDF",    ext: ".nc  .nc4  .cdf",   tag: "Python",  desc: "Atmospheric and space-weather datasets. xarray-powered extraction of TEC variables." },
+            { fmt: "RINEX Obs",  ext: ".rnx  .obs  .##o", tag: "Python",  desc: "GPS/GNSS observation files. TEC computed from dual-frequency pseudoranges." },
+            { fmt: "RINEX Nav",  ext: ".nav  .##n  .##g",  tag: "Python",  desc: "Navigation/broadcast ephemeris files parsed via georinex." },
+            { fmt: "HDF5",       ext: ".h5  .hdf5  .hdf",  tag: "Python",  desc: "Scientific data containers. TEC variables auto-detected by name pattern." },
+            { fmt: "NetCDF",     ext: ".nc  .nc4  .cdf",   tag: "Python",  desc: "Atmospheric and space-weather datasets. xarray-powered TEC extraction." },
           ].map(f => {
             const isPython = f.tag === "Python";
             return (
@@ -903,29 +984,23 @@ function EmptyState({ onLoadDemo, onUpload }: { onLoadDemo: () => void; onUpload
             );
           })}
         </div>
-        <div className="mt-3 flex items-center gap-4 text-[11px] text-muted-foreground">
-          <span className="flex items-center gap-1.5"><span className="inline-flex h-4 w-7 items-center justify-center rounded bg-green-500/20 text-[9px] font-bold text-green-400">JS</span> Parsed in browser — instant</span>
-          <span className="flex items-center gap-1.5"><span className="inline-flex h-4 w-7 items-center justify-center rounded bg-primary/20 text-[9px] font-bold text-primary">PY</span> Sent to Python backend — may take a few seconds</span>
-        </div>
       </div>
     </div>
   );
 }
 
-// ─── Heatmap view ─────────────────────────────────────────────────────────────
+// ─── Heatmap ──────────────────────────────────────────────────────────────────
 function HeatmapView({ data }: { data: { timeSlot: number; lat: number; tec: number }[] }) {
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const lats = [...new Set(data.map(d => d.lat))].sort((a, b) => b - a);
   const tecMap = new Map(data.map(d => [`${d.timeSlot}|${d.lat}`, d.tec]));
   const maxTEC = Math.max(...data.map(d => d.tec), 1);
 
-  if (!data.length) {
-    return (
-      <div className="glass flex h-64 items-center justify-center rounded-2xl border border-border/40">
-        <p className="text-sm text-muted-foreground">No latitude data — dataset needs lat/lon columns for heatmap</p>
-      </div>
-    );
-  }
+  if (!data.length) return (
+    <div className="glass flex h-64 items-center justify-center rounded-2xl border border-border/40">
+      <p className="text-sm text-muted-foreground">No latitude data — dataset needs lat/lon columns for heatmap</p>
+    </div>
+  );
 
   return (
     <div className="glass rounded-2xl border border-border/40 p-5">
@@ -933,16 +1008,14 @@ function HeatmapView({ data }: { data: { timeSlot: number; lat: number; tec: num
       <div className="overflow-x-auto">
         <div style={{ display: "grid", gridTemplateColumns: `60px repeat(24, minmax(24px, 1fr))`, gap: 2 }}>
           <div className="text-[9px] text-muted-foreground text-right pr-1 pb-1">Lat</div>
-          {hours.map(h => (
-            <div key={h} className="text-[9px] text-center text-muted-foreground">{h}</div>
-          ))}
+          {hours.map(h => <div key={h} className="text-[9px] text-center text-muted-foreground">{h}</div>)}
           {lats.map(lat => (
             <>
               <div key={`lat-${lat}`} className="text-[9px] text-right pr-1 text-muted-foreground self-center">{lat}°</div>
               {hours.map(h => {
                 const tec = tecMap.get(`${h}|${lat}`);
                 return (
-                  <div key={`${lat}-${h}`} title={tec !== undefined ? `${lat}° ${h}:00 UTC — ${tec.toFixed(1)} TECU` : "No data"}
+                  <div key={`${lat}-${h}`} title={tec !== undefined ? `${lat}° ${h}:00 — ${tec.toFixed(1)} TECU` : "No data"}
                     className="rounded-sm" style={{
                       height: 18,
                       background: tec !== undefined ? tecToColor(tec, 0, maxTEC) : "rgba(255,255,255,0.03)",
@@ -953,12 +1026,9 @@ function HeatmapView({ data }: { data: { timeSlot: number; lat: number; tec: num
             </>
           ))}
         </div>
-        {/* Color scale legend */}
         <div className="mt-4 flex items-center gap-3">
           <span className="text-[10px] text-muted-foreground">0 TECU</span>
-          <div className="h-3 flex-1 rounded-full" style={{
-            background: "linear-gradient(to right, rgb(68,1,84), rgb(59,82,139), rgb(33,145,140), rgb(94,201,98), rgb(253,231,37), rgb(253,127,37), rgb(220,50,50))"
-          }} />
+          <div className="h-3 flex-1 rounded-full" style={{ background: "linear-gradient(to right, rgb(68,1,84), rgb(59,82,139), rgb(33,145,140), rgb(94,201,98), rgb(253,231,37), rgb(253,127,37), rgb(220,50,50))" }} />
           <span className="text-[10px] text-muted-foreground">{maxTEC.toFixed(0)} TECU</span>
         </div>
       </div>
@@ -966,7 +1036,7 @@ function HeatmapView({ data }: { data: { timeSlot: number; lat: number; tec: num
   );
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Build merged timeline ────────────────────────────────────────────────────
 function buildMergedTimeline(series: { station: string; data: { timestamp: number; medianTEC: number }[] }[]) {
   const tsSet = new Set<number>();
   for (const s of series) for (const d of s.data) tsSet.add(d.timestamp);
