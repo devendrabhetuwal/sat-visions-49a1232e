@@ -516,7 +516,7 @@ function TECLabPage() {
         {/* ── Main content ──────────────────────────────────────────────── */}
         <main className="flex flex-1 flex-col overflow-hidden">
           {!parsed ? (
-            <EmptyState onLoadDemo={loadDemo} />
+            <EmptyState onLoadDemo={loadDemo} onUpload={() => fileRef.current?.click()} />
           ) : (
             <>
               {/* View tabs */}
@@ -834,7 +834,7 @@ function ChartHeader({ view, bins, onExport }: { view: ViewMode; bins: EpochBin[
   );
 }
 
-function EmptyState({ onLoadDemo }: { onLoadDemo: () => void }) {
+function EmptyState({ onLoadDemo, onUpload }: { onLoadDemo: () => void; onUpload: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto">
       <div className="flex h-20 w-20 items-center justify-center rounded-2xl" style={{ background: "var(--gradient-primary)" }}>
@@ -843,7 +843,7 @@ function EmptyState({ onLoadDemo }: { onLoadDemo: () => void }) {
       <div>
         <h2 className="text-2xl font-bold" style={{ fontFamily: "Space Grotesk" }}>GPS TEC Analysis Platform</h2>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Upload your GPS/GNSS dataset to begin. Automatic column detection — no reformatting needed.
+          Upload your own GPS/GNSS dataset to analyse it instantly — or explore with the built-in demo.
         </p>
       </div>
 
@@ -857,17 +857,22 @@ function EmptyState({ onLoadDemo }: { onLoadDemo: () => void }) {
         ))}
       </div>
 
-      {/* CTA */}
+      {/* CTA — primary: upload, secondary: demo */}
       <div className="flex flex-wrap gap-3 justify-center">
-        <button onClick={onLoadDemo}
-          className="flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white transition-all hover:brightness-110"
+        <button onClick={onUpload}
+          className="flex items-center gap-2 rounded-full px-7 py-3 text-sm font-semibold text-white transition-all hover:brightness-110 shadow-lg"
           style={{ background: "var(--gradient-primary)" }}>
+          <Upload className="h-4 w-4" /> Upload Your File
+        </button>
+        <button onClick={onLoadDemo}
+          className="glass flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium hover:text-primary transition-colors">
           <FlaskConical className="h-4 w-4" /> Load Demo Dataset
         </button>
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground self-center">
-          <Info className="h-3.5 w-3.5" /> Or use the sidebar to upload your file
-        </p>
       </div>
+      <p className="text-xs text-muted-foreground -mt-3">
+        <Info className="inline h-3.5 w-3.5 mr-1" />
+        CSV · TXT · IONEX · RINEX · HDF5 · NetCDF — all calculations run on your data, not on the demo
+      </p>
 
       {/* Format guide */}
       <div className="w-full max-w-2xl">
