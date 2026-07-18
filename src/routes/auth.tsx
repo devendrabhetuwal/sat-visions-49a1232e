@@ -47,13 +47,49 @@ function LoginPage() {
   const [loading, setLoading]           = useState(false);
   const [puterLoading, setPuterLoading] = useState(false);
   const [error, setError]               = useState("");
+  // true while we validate existing sessions — prevents the form flashing
+  const [checking, setChecking]         = useState(true);
 
-  // Already logged in → skip to dashboard
   useEffect(() => {
-    const ok =
-      localStorage.getItem("puter_session") === "true" ||
-      localStorage.getItem("admin_session") === "true";
-    if (ok) navigate({ to: "/dashboard" });
+    // Admin session needs no external validation — redirect immediately
+    if (localStorage.getItem("admin_session") === "true") {
+      navigate({ to: "/dashboard" });
+      return;
+    }
+
+    // Puter session: validate against the live Puter.js state.
+    // Puter.js loads asynchronously, so poll until it's ready.
+    if (localStorage.getItem("puter_session") === "true") {
+      let attempts = 0;
+      const validate = () => {
+        if (typeof window.puter !== "undefined") {
+          if (window.puter.auth.isSignedIn()) {
+            // Session is still valid — send to dashboard
+            navigate({ to: "/dashboard" });
+          } else {
+            // Stale session — Puter says not signed in, clear it and show login
+            localStorage.removeItem("puter_session");
+            localStorage.removeItem("puter_user");
+            localStorage.removeItem("user_session");
+            setChecking(false);
+          }
+        } else if (attempts < 20) {
+          // Puter.js not yet ready, retry
+          attempts++;
+          setTimeout(validate, 300);
+        } else {
+          // Puter.js never loaded — clear stale session and show login
+          localStorage.removeItem("puter_session");
+          localStorage.removeItem("puter_user");
+          localStorage.removeItem("user_session");
+          setChecking(false);
+        }
+      };
+      validate();
+    } else {
+      // No session stored — show login page immediately
+      setChecking(false);
+    }
   }, [navigate]);
 
   const switchTab = (next: Tab) => {
@@ -111,6 +147,23 @@ function LoginPage() {
       setPuterLoading(false);
     }
   };
+
+  // While validating an existing session, show a neutral loading screen
+  // so the form never flashes before the redirect fires.
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center"
+        style={{ background: "var(--background)" }}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl"
+            style={{ background: "var(--gradient-primary)" }}>
+            <Satellite className="h-6 w-6 text-white" />
+          </div>
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
