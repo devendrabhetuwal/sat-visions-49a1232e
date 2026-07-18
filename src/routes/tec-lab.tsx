@@ -344,7 +344,7 @@ function TECLabPage() {
                   <Upload className="h-5 w-5 text-muted-foreground" />
                   <p className="text-xs font-medium">Drop or click to upload</p>
                   <p className="text-[10px] text-muted-foreground leading-tight">CSV · TXT · DAT · IONEX<br />Max 50 MB</p>
-                  <input ref={fileRef} type="file" accept=".csv,.txt,.dat,.ionex,.rnx,.zip" className="hidden"
+                  <input ref={fileRef} type="file" accept=".csv,.txt,.dat,.ionex" className="hidden"
                     onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
                 </div>
 
@@ -786,16 +786,18 @@ function ChartHeader({ view, bins, onExport }: { view: ViewMode; bins: EpochBin[
 
 function EmptyState({ onLoadDemo }: { onLoadDemo: () => void }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto">
       <div className="flex h-20 w-20 items-center justify-center rounded-2xl" style={{ background: "var(--gradient-primary)" }}>
         <Satellite className="h-10 w-10 text-white" />
       </div>
       <div>
         <h2 className="text-2xl font-bold" style={{ fontFamily: "Space Grotesk" }}>GPS TEC Analysis Platform</h2>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Upload your GPS/GNSS dataset to begin. Supports CSV, TXT, DAT, and IONEX formats with automatic column detection.
+          Upload your GPS/GNSS dataset to begin. Automatic column detection — no reformatting needed.
         </p>
       </div>
+
+      {/* Capabilities */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs text-muted-foreground max-w-xl">
         {["Auto column detection", "Multi-station analysis", "ROTI + ΔTEC computation", "Storm phase detection",
           "8 interactive charts", "IONEX map parsing", "Publication-quality output", "CSV/PNG export"].map(f => (
@@ -804,7 +806,9 @@ function EmptyState({ onLoadDemo }: { onLoadDemo: () => void }) {
           </div>
         ))}
       </div>
-      <div className="flex gap-3">
+
+      {/* CTA */}
+      <div className="flex flex-wrap gap-3 justify-center">
         <button onClick={onLoadDemo}
           className="flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white transition-all hover:brightness-110"
           style={{ background: "var(--gradient-primary)" }}>
@@ -814,9 +818,47 @@ function EmptyState({ onLoadDemo }: { onLoadDemo: () => void }) {
           <Info className="h-3.5 w-3.5" /> Or use the sidebar to upload your file
         </p>
       </div>
-      <div className="max-w-lg rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-xs text-yellow-200">
-        <p className="font-semibold mb-1">Supported in browser: CSV · TXT · DAT · IONEX</p>
-        <p className="text-yellow-300/80">RINEX binary, HDF5 (.h5), and NetCDF (.nc) require the Python backend (FastAPI + georinex/h5py/netCDF4). Upload CSV exports from those formats for browser processing.</p>
+
+      {/* Format guide */}
+      <div className="w-full max-w-2xl">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Supported formats</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {/* Supported */}
+          {[
+            { fmt: "CSV / TSV", ext: ".csv  .tsv", icon: "✓", color: "green", desc: "Any delimiter, auto-detected headers. Works with GNSS software exports (RTKLIB, TEQC, custom loggers)." },
+            { fmt: "Plain text", ext: ".txt  .dat", icon: "✓", color: "green", desc: "Space/tab-separated columns. Supports comment lines starting with #, %, or !." },
+            { fmt: "IONEX",      ext: ".ionex", icon: "✓", color: "green", desc: "IGS global TEC maps. Parsed directly in browser — supports all versions with EXPONENT scaling." },
+            { fmt: "CSV exports from RINEX", ext: "via RTKLIB / teqc", icon: "✓", color: "blue", desc: 'Convert RINEX to CSV first using RTKLIB ("rtkconv") or teqc, then upload the resulting .csv file.' },
+          ].map(f => (
+            <div key={f.fmt} className={`glass flex items-start gap-3 rounded-xl border p-3 text-left ${f.color === "green" ? "border-green-500/20 bg-green-500/5" : "border-blue-500/20 bg-blue-500/5"}`}>
+              <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${f.color === "green" ? "bg-green-500/20 text-green-400" : "bg-blue-500/20 text-blue-400"}`}>{f.icon}</span>
+              <div>
+                <p className="text-xs font-semibold text-foreground">{f.fmt} <span className="font-mono text-[10px] text-muted-foreground ml-1">{f.ext}</span></p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{f.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* RINEX / HDF5 / NetCDF — not supported notice */}
+        <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/8 p-4 text-left">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <div>
+              <p className="text-xs font-semibold text-amber-300">RINEX binary, HDF5, and NetCDF are not supported in the browser</p>
+              <p className="mt-1 text-[11px] text-amber-200/70 leading-relaxed">
+                These binary formats require a Python backend (georinex / h5py / netCDF4) that is not yet deployed.
+                <br />
+                <span className="font-medium text-amber-200">Workaround:</span> convert your file to CSV first:
+              </p>
+              <ul className="mt-2 space-y-1 text-[11px] text-amber-200/70">
+                <li><span className="text-amber-300 font-mono">RINEX → CSV:</span> use <span className="font-medium text-amber-200">RTKLIB rtkconv</span> or <span className="font-medium text-amber-200">teqc -O.obs S</span></li>
+                <li><span className="text-amber-300 font-mono">HDF5 → CSV:</span> <span className="font-mono text-amber-200">python -c "import pandas as pd; pd.read_hdf('f.h5').to_csv('f.csv')"</span></li>
+                <li><span className="text-amber-300 font-mono">NetCDF → CSV:</span> <span className="font-mono text-amber-200">python -c "import xarray as xr; xr.open_dataset('f.nc').to_dataframe().to_csv('f.csv')"</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

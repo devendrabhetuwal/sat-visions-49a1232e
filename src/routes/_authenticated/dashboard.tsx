@@ -266,6 +266,9 @@ function Dashboard() {
             <Link to="/data-lab" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium hover:bg-white/5">
               <FlaskConical className="h-3.5 w-3.5" /> Data Lab
             </Link>
+            <Link to="/tec-lab" className="glass flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-primary border border-primary/30 hover:bg-primary/10 transition-colors">
+              <Satellite className="h-3.5 w-3.5" /> TEC Lab
+            </Link>
             {(adminInfo?.isAdmin || isLocalAdmin) && (
               <Link to="/admin" className="glass flex items-center gap-2 rounded-full border-primary/40 px-4 py-1.5 text-xs font-medium text-primary hover:bg-white/5">
                 <Shield className="h-3.5 w-3.5" /> Admin
