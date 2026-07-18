@@ -14,6 +14,39 @@ import {
 import { toast } from "sonner";
 import { parseFile } from "@/lib/tec/parser";
 import type { ParseResult, TECRecord } from "@/lib/tec/parser";
+
+// ─── Binary format detection & API upload ─────────────────────────────────────
+const RINEX_EXTS  = new Set([".rnx", ".obs", ".nav", ".o", ".n", ".g", ".l", ".p",
+  ".21o", ".22o", ".23o", ".24o", ".25o", ".21n", ".22n", ".23n", ".24n"]);
+const HDF5_EXTS   = new Set([".h5", ".hdf5", ".hdf", ".he5"]);
+const NETCDF_EXTS = new Set([".nc", ".cdf", ".nc4", ".netcdf"]);
+
+function getBinaryFormat(filename: string): "rinex" | "hdf5" | "netcdf" | null {
+  const ext = "." + filename.split(".").pop()!.toLowerCase();
+  if (RINEX_EXTS.has(ext))  return "rinex";
+  if (HDF5_EXTS.has(ext))   return "hdf5";
+  if (NETCDF_EXTS.has(ext)) return "netcdf";
+  return null;
+}
+
+async function uploadToPythonParser(
+  file: File,
+  fmt: "rinex" | "hdf5" | "netcdf",
+  onProgress: (p: number) => void,
+): Promise<string> {
+  onProgress(15);
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/py/parse/${fmt}`, { method: "POST", body: form });
+  onProgress(75);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? `Server error ${res.status}`);
+  }
+  const json = await res.json();
+  onProgress(95);
+  return json.csv as string;
+}
 import {
   computeEpochBins, buildStationSeries, detectStormPhases,
   buildHeatmap, tecToColor, STATION_COLORS,
@@ -243,13 +276,30 @@ function TECLabPage() {
 
   const handleFile = useCallback((file: File) => {
     setFilename(file.name);
-    const reader = new FileReader();
-    reader.onload = e => {
-      const text = e.target?.result as string;
-      setRawText(text);
-      processText(text, file.name);
-    };
-    reader.readAsText(file);
+    const binaryFmt = getBinaryFormat(file.name);
+
+    if (binaryFmt) {
+      // ── Binary format: send to Python backend ──────────────────────────────
+      setIsProcessing(true); setProgress(10);
+      uploadToPythonParser(file, binaryFmt, setProgress)
+        .then(csv => {
+          setRawText(csv);
+          processText(csv, file.name.replace(/\.[^.]+$/, ".csv"));
+        })
+        .catch(err => {
+          setIsProcessing(false); setProgress(0);
+          toast.error(`Parse error: ${err.message}`);
+        });
+    } else {
+      // ── Text format: parse in browser ──────────────────────────────────────
+      const reader = new FileReader();
+      reader.onload = e => {
+        const text = e.target?.result as string;
+        setRawText(text);
+        processText(text, file.name);
+      };
+      reader.readAsText(file);
+    }
   }, [processText]);
 
   const loadDemo = () => {
@@ -343,8 +393,8 @@ function TECLabPage() {
                 >
                   <Upload className="h-5 w-5 text-muted-foreground" />
                   <p className="text-xs font-medium">Drop or click to upload</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight">CSV · TXT · DAT · IONEX<br />Max 50 MB</p>
-                  <input ref={fileRef} type="file" accept=".csv,.txt,.dat,.ionex" className="hidden"
+                  <p className="text-[10px] text-muted-foreground leading-tight">CSV · TXT · IONEX · RINEX · HDF5 · NetCDF<br />Max 100 MB</p>
+                  <input ref={fileRef} type="file" accept=".csv,.txt,.dat,.ionex,.rnx,.obs,.nav,.o,.n,.h5,.hdf5,.hdf,.nc,.nc4,.cdf" className="hidden"
                     onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
                 </div>
 
@@ -821,43 +871,36 @@ function EmptyState({ onLoadDemo }: { onLoadDemo: () => void }) {
 
       {/* Format guide */}
       <div className="w-full max-w-2xl">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Supported formats</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">All supported formats</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {/* Supported */}
           {[
-            { fmt: "CSV / TSV", ext: ".csv  .tsv", icon: "✓", color: "green", desc: "Any delimiter, auto-detected headers. Works with GNSS software exports (RTKLIB, TEQC, custom loggers)." },
-            { fmt: "Plain text", ext: ".txt  .dat", icon: "✓", color: "green", desc: "Space/tab-separated columns. Supports comment lines starting with #, %, or !." },
-            { fmt: "IONEX",      ext: ".ionex", icon: "✓", color: "green", desc: "IGS global TEC maps. Parsed directly in browser — supports all versions with EXPONENT scaling." },
-            { fmt: "CSV exports from RINEX", ext: "via RTKLIB / teqc", icon: "✓", color: "blue", desc: 'Convert RINEX to CSV first using RTKLIB ("rtkconv") or teqc, then upload the resulting .csv file.' },
-          ].map(f => (
-            <div key={f.fmt} className={`glass flex items-start gap-3 rounded-xl border p-3 text-left ${f.color === "green" ? "border-green-500/20 bg-green-500/5" : "border-blue-500/20 bg-blue-500/5"}`}>
-              <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${f.color === "green" ? "bg-green-500/20 text-green-400" : "bg-blue-500/20 text-blue-400"}`}>{f.icon}</span>
-              <div>
-                <p className="text-xs font-semibold text-foreground">{f.fmt} <span className="font-mono text-[10px] text-muted-foreground ml-1">{f.ext}</span></p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{f.desc}</p>
+            { fmt: "CSV / TSV",  ext: ".csv  .tsv  .dat", tag: "Browser", desc: "Any delimiter, auto-detected headers. Works with RTKLIB, TEQC, and custom GNSS loggers." },
+            { fmt: "Plain text", ext: ".txt  .dat",        tag: "Browser", desc: "Space/tab-separated columns. Comment lines starting with #, %, or ! are skipped." },
+            { fmt: "IONEX",      ext: ".ionex",            tag: "Browser", desc: "IGS global TEC maps. All versions with EXPONENT scaling parsed natively." },
+            { fmt: "RINEX Obs", ext: ".rnx  .obs  .##o",  tag: "Python",  desc: "GPS/GNSS observation files. TEC computed from dual-frequency pseudoranges (P1/P2, C1/C2)." },
+            { fmt: "RINEX Nav", ext: ".nav  .##n  .##g",  tag: "Python",  desc: "Navigation/broadcast ephemeris files parsed via georinex." },
+            { fmt: "HDF5",      ext: ".h5  .hdf5  .hdf",  tag: "Python",  desc: "Scientific data containers. TEC variables auto-detected by name pattern." },
+            { fmt: "NetCDF",    ext: ".nc  .nc4  .cdf",   tag: "Python",  desc: "Atmospheric and space-weather datasets. xarray-powered extraction of TEC variables." },
+          ].map(f => {
+            const isPython = f.tag === "Python";
+            return (
+              <div key={f.fmt} className={`glass flex items-start gap-3 rounded-xl border p-3 text-left ${isPython ? "border-primary/20 bg-primary/5" : "border-green-500/20 bg-green-500/5"}`}>
+                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${isPython ? "bg-primary/20 text-primary" : "bg-green-500/20 text-green-400"}`}>
+                  {isPython ? "PY" : "JS"}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">
+                    {f.fmt} <span className="font-mono text-[10px] text-muted-foreground ml-1">{f.ext}</span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{f.desc}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-
-        {/* RINEX / HDF5 / NetCDF — not supported notice */}
-        <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/8 p-4 text-left">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <div>
-              <p className="text-xs font-semibold text-amber-300">RINEX binary, HDF5, and NetCDF are not supported in the browser</p>
-              <p className="mt-1 text-[11px] text-amber-200/70 leading-relaxed">
-                These binary formats require a Python backend (georinex / h5py / netCDF4) that is not yet deployed.
-                <br />
-                <span className="font-medium text-amber-200">Workaround:</span> convert your file to CSV first:
-              </p>
-              <ul className="mt-2 space-y-1 text-[11px] text-amber-200/70">
-                <li><span className="text-amber-300 font-mono">RINEX → CSV:</span> use <span className="font-medium text-amber-200">RTKLIB rtkconv</span> or <span className="font-medium text-amber-200">teqc -O.obs S</span></li>
-                <li><span className="text-amber-300 font-mono">HDF5 → CSV:</span> <span className="font-mono text-amber-200">python -c "import pandas as pd; pd.read_hdf('f.h5').to_csv('f.csv')"</span></li>
-                <li><span className="text-amber-300 font-mono">NetCDF → CSV:</span> <span className="font-mono text-amber-200">python -c "import xarray as xr; xr.open_dataset('f.nc').to_dataframe().to_csv('f.csv')"</span></li>
-              </ul>
-            </div>
-          </div>
+        <div className="mt-3 flex items-center gap-4 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5"><span className="inline-flex h-4 w-7 items-center justify-center rounded bg-green-500/20 text-[9px] font-bold text-green-400">JS</span> Parsed in browser — instant</span>
+          <span className="flex items-center gap-1.5"><span className="inline-flex h-4 w-7 items-center justify-center rounded bg-primary/20 text-[9px] font-bold text-primary">PY</span> Sent to Python backend — may take a few seconds</span>
         </div>
       </div>
     </div>
