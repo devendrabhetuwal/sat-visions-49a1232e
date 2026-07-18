@@ -39,7 +39,7 @@ ${data.datasetContext}
 ${data.stats ? `\nStatistics: min=${data.stats.min.toFixed(3)}, max=${data.stats.max.toFixed(3)}, mean=${data.stats.mean.toFixed(3)}, valid pixels=${data.stats.count}` : ""}`;
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

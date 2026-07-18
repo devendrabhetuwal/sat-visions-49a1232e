@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UserAuthRouteImport } from './routes/user-auth'
+import { Route as TecLabRouteImport } from './routes/tec-lab'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DataLabRouteImport } from './routes/data-lab'
@@ -29,6 +30,11 @@ import { Route as ShareTimeseriesIdRouteImport } from './routes/share.timeseries
 const UserAuthRoute = UserAuthRouteImport.update({
   id: '/user-auth',
   path: '/user-auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TecLabRoute = TecLabRouteImport.update({
+  id: '/tec-lab',
+  path: '/tec-lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PricingRoute = PricingRouteImport.update({
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/data-lab': typeof DataLabRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
+  '/tec-lab': typeof TecLabRoute
   '/user-auth': typeof UserAuthRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analysis': typeof AuthenticatedAnalysisRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/data-lab': typeof DataLabRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
+  '/tec-lab': typeof TecLabRoute
   '/user-auth': typeof UserAuthRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/analysis': typeof AuthenticatedAnalysisRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/data-lab': typeof DataLabRoute
   '/docs': typeof DocsRoute
   '/pricing': typeof PricingRoute
+  '/tec-lab': typeof TecLabRoute
   '/user-auth': typeof UserAuthRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/analysis': typeof AuthenticatedAnalysisRoute
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/data-lab'
     | '/docs'
     | '/pricing'
+    | '/tec-lab'
     | '/user-auth'
     | '/admin'
     | '/analysis'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/data-lab'
     | '/docs'
     | '/pricing'
+    | '/tec-lab'
     | '/user-auth'
     | '/admin'
     | '/analysis'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/data-lab'
     | '/docs'
     | '/pricing'
+    | '/tec-lab'
     | '/user-auth'
     | '/_authenticated/admin'
     | '/_authenticated/analysis'
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   DataLabRoute: typeof DataLabRoute
   DocsRoute: typeof DocsRoute
   PricingRoute: typeof PricingRoute
+  TecLabRoute: typeof TecLabRoute
   UserAuthRoute: typeof UserAuthRoute
   ShareTimeseriesIdRoute: typeof ShareTimeseriesIdRoute
 }
@@ -234,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/user-auth'
       fullPath: '/user-auth'
       preLoaderRoute: typeof UserAuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tec-lab': {
+      id: '/tec-lab'
+      path: '/tec-lab'
+      fullPath: '/tec-lab'
+      preLoaderRoute: typeof TecLabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pricing': {
@@ -382,6 +402,7 @@ const rootRouteChildren: RootRouteChildren = {
   DataLabRoute: DataLabRoute,
   DocsRoute: DocsRoute,
   PricingRoute: PricingRoute,
+  TecLabRoute: TecLabRoute,
   UserAuthRoute: UserAuthRoute,
   ShareTimeseriesIdRoute: ShareTimeseriesIdRoute,
 }

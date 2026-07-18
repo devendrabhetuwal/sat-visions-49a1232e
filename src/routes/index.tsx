@@ -38,6 +38,9 @@ function Landing() {
             <Link to="/data-lab" activeProps={{ className: "text-foreground" }} className="flex items-center gap-1 hover:text-foreground transition-colors">
               <FlaskConical className="h-3.5 w-3.5" /> Data Lab
             </Link>
+            <Link to="/tec-lab" activeProps={{ className: "text-foreground" }} className="flex items-center gap-1 hover:text-foreground transition-colors text-primary font-medium">
+              <Satellite className="h-3.5 w-3.5" /> TEC Lab
+            </Link>
             <Link to="/docs" activeProps={{ className: "text-foreground" }}>Docs</Link>
             <Link to="/pricing" activeProps={{ className: "text-foreground" }}>Pricing</Link>
             <Link to="/contact" activeProps={{ className: "text-foreground" }}>Contact</Link>
