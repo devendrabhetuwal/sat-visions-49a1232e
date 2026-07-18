@@ -5,7 +5,7 @@ import {
   Loader2, Satellite, ExternalLink, Activity, Globe,
   TrendingUp, AlertTriangle, Flame, Wind, Waves,
   RefreshCw, Clock, BarChart3, LayoutDashboard, ChevronRight,
-  UserCircle2, LogIn,
+  UserCircle2, LogIn, FlaskConical,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -132,6 +132,12 @@ function AdminPage() {
             <span className="hidden sm:flex glass items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
               <Shield className="h-3 w-3" /> Admin Console
             </span>
+            <Link to="/data-lab" className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium hover:text-primary transition-colors">
+              <FlaskConical className="h-3.5 w-3.5" /> Data Lab
+            </Link>
+            <Link to="/tec-lab" className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 hover:bg-primary/10 transition-colors">
+              <Satellite className="h-3.5 w-3.5" /> TEC Lab
+            </Link>
             <Link
               to="/dashboard"
               className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium hover:text-primary transition-colors"
