@@ -5,7 +5,7 @@ import {
   Layers, TrendingUp, AlertCircle, CheckCircle, Download, Copy,
   ChevronLeft, ChevronRight, Info, RefreshCw, FileText,
   Thermometer, Zap, Globe, Filter, X, Eye, Plus, Play, Trash2,
-  Loader2,
+  Loader2, Cpu,
 } from "lucide-react";
 import {
   ComposedChart, LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -15,6 +15,9 @@ import {
 import { toast } from "sonner";
 import { parseFile, mergeParseResults } from "@/lib/tec/parser";
 import type { ParseResult, TECRecord } from "@/lib/tec/parser";
+import { runEngine } from "@/lib/tec/engine";
+import type { EngineResult } from "@/lib/tec/engine";
+import { EnginePanel } from "@/components/tec/EnginePanel";
 import {
   computeEpochBins, buildStationSeries, detectStormPhases,
   buildHeatmap, tecToColor, STATION_COLORS,
@@ -84,7 +87,7 @@ function generateDemoData(): string {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type ViewMode = "tec" | "dual" | "delta" | "roti" | "slant" | "heatmap" | "map" | "summary";
+type ViewMode = "tec" | "dual" | "delta" | "roti" | "slant" | "heatmap" | "map" | "summary" | "engine";
 type FileStatus = "pending" | "processing" | "done" | "error";
 
 interface UploadedFile {
@@ -106,6 +109,7 @@ const VIEWS: { id: ViewMode; label: string; icon: React.ReactNode; desc: string 
   { id: "heatmap", label: "Daily Heatmap",       icon: <Thermometer className="h-4 w-4" />, desc: "Lat × Time × TEC" },
   { id: "map",     label: "World Map",           icon: <Globe className="h-4 w-4" />,       desc: "Station locations" },
   { id: "summary", label: "Summary",             icon: <Eye className="h-4 w-4" />,         desc: "Stats dashboard" },
+  { id: "engine",  label: "⚡ Engine",            icon: <Cpu className="h-4 w-4" />,         desc: "Advanced signal-processing analysis" },
 ];
 
 const CHART_STYLE = {
@@ -245,6 +249,24 @@ function TECLabPage() {
     }
     return [...map.entries()].map(([sta, d]) => ({ station: sta, lat: mean(d.lats), lon: mean(d.lons), medTEC: median(d.tecs) }));
   }, [filteredRecords]);
+
+  // ─── Engine ─────────────────────────────────────────────────────────────────
+  const engineResult = useMemo<EngineResult | null>(() => {
+    if (!parsed || filteredRecords.length < 4) return null;
+    // Build primary TEC time-series (first station, sorted by time)
+    const primary = stationSeries[0];
+    if (!primary || primary.data.length < 4) return null;
+    const sorted  = [...primary.data].sort((a, b) => a.timestamp - b.timestamp);
+    const values     = sorted.map(d => d.medianTEC);
+    const timestamps = sorted.map(d => d.timestamp);
+    // Build station matrix for PCA [nTime × nStations]
+    const allTimestamps = [...new Set(stationSeries.flatMap(s => s.data.map(d => d.timestamp)))].sort((a, b) => a - b);
+    const stationMatrix: number[][] = allTimestamps.map(ts =>
+      stationSeries.map(s => s.data.find(d => d.timestamp === ts)?.medianTEC ?? 0)
+    );
+    const sampleIntervalSec = binMinutes * 60;
+    return runEngine(values, timestamps, sampleIntervalSec, stationMatrix);
+  }, [parsed, filteredRecords, stationSeries, binMinutes]);
 
   // ─── Leaflet lazy-load ──────────────────────────────────────────────────────
   const [MapComponents, setMapComponents] = useState<{
@@ -624,8 +646,13 @@ function TECLabPage() {
               {/* Chart area */}
               <div className="flex-1 overflow-y-auto p-4">
                 <ChartHeader view={view} bins={epochBins} onExport={() => {
-                  const data = view === "tec" ? stationSeries.flatMap(s => s.data.map(d => ({ station: s.station, ...d })))
-                    : view === "delta" ? deltaData : view === "roti" ? rotiData : filteredRecords.slice(0, 5000);
+                  const data = view === "tec"    ? stationSeries.flatMap(s => s.data.map(d => ({ station: s.station, ...d })))
+                    : view === "delta"  ? deltaData
+                    : view === "roti"   ? rotiData
+                    : view === "engine" ? (engineResult
+                        ? engineResult.anomalies.map((a, i) => ({ index: i, value: a.value, score: a.score, isAnomaly: a.isAnomaly }))
+                        : [])
+                    : filteredRecords.slice(0, 5000);
                   downloadCSV(data, `satvision_${view}_${Date.now()}.csv`);
                 }} />
 
@@ -867,6 +894,27 @@ function TECLabPage() {
                       </table>
                     </div>
                   </div>
+                )}
+
+                {/* ── Engine ─────────────────────────────────────────── */}
+                {view === "engine" && (
+                  engineResult ? (
+                    <EnginePanel
+                      result={engineResult}
+                      rawValues={(stationSeries[0]?.data ?? []).sort((a, b) => a.timestamp - b.timestamp).map(d => d.medianTEC)}
+                      timestamps={(stationSeries[0]?.data ?? []).sort((a, b) => a.timestamp - b.timestamp).map(d => d.timestamp)}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+                        <Cpu className="h-8 w-8 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">Engine needs more data</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Upload a dataset with at least 4 time-binned records and run Create Analysis.</p>
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
             </>
