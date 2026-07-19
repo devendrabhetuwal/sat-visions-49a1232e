@@ -1,0 +1,380 @@
+Build a production-ready web application called **TechLab AI** — an enterprise-grade scientific data analysis platform with a modern, intuitive, and high-performance user interface. The application should be designed for researchers, engineers, GIS professionals, GNSS analysts, atmospheric scientists, and students. It must transform raw scientific datasets into cleaned, analyzed, visualized, and exportable results using advanced statistical and AI-powered techniques.
+
+## Core Requirements
+
+Develop a full-stack application using:
+- Frontend: React + TypeScript + Next.js (or Vite) + Tailwind CSS + Shadcn/UI + Framer Motion
+- Backend: Python FastAPI
+- Database: PostgreSQL (SQLite for local mode)
+- Cache: Redis
+- Background Processing: Celery/RQ with async workers
+- Authentication: JWT + OAuth
+- Docker support
+- REST API + GraphQL
+- Modular plugin architecture
+
+## Supported File Formats
+
+Automatically detect, validate, parse, and process:
+
+- CSV
+- TXT
+- TSV
+- Excel (.xlsx)
+- JSON
+- XML
+- HDF5
+- NetCDF
+- RINEX Observation
+- RINEX Navigation
+- RNX
+- IONEX
+- SP3
+- CLK
+- SINEX
+- NMEA
+- BINEX
+- GeoTIFF
+- LAS
+- KML
+- GPX
+- ZIP archives containing supported files
+
+The application should automatically identify file type without requiring user selection.
+
+## Data Extraction
+
+Extract all available metadata and measurements.
+
+For RINEX:
+- Satellites
+- Epochs
+- Observation Types
+- Coordinates
+- Receiver Information
+- Antenna Information
+- Clock Bias
+- Signal Strength
+- Multipath
+- Cycle Slips
+
+For IONEX:
+- TEC Maps
+- RMS Maps
+- Grid Data
+- Time Series
+- Metadata
+
+For HDF5:
+- Recursively detect datasets
+- Groups
+- Metadata
+- Attributes
+
+For NetCDF:
+- Variables
+- Dimensions
+- Coordinates
+- Time
+- Metadata
+- Attributes
+
+## Automatic Data Cleaning
+
+Create a complete preprocessing pipeline.
+
+Automatically detect and fix:
+
+- Missing values
+- Duplicate records
+- Invalid timestamps
+- Invalid coordinates
+- Outliers
+- Corrupted rows
+- Incorrect encoding
+- Mixed delimiters
+- Empty columns
+- Constant columns
+
+Include:
+
+- Interpolation
+- Standardization
+- Normalization
+- Unit conversion
+- Noise filtering
+- Moving average
+- Rolling median
+- Coordinate transformation
+- Timestamp synchronization
+- Data validation
+
+Save both the original dataset and the cleaned dataset.
+
+## Statistical Analysis
+
+Automatically compute:
+
+- Mean
+- Median
+- Mode
+- Min
+- Max
+- Quartiles
+- Variance
+- Standard Deviation
+- Correlation Matrix
+- Covariance
+- PCA
+- Regression
+- ANOVA
+- Fourier Transform
+- Wavelet Transform
+- Spectral Analysis
+- Trend Detection
+- Seasonality Detection
+- Time Series Analysis
+- Confidence Intervals
+- Clustering
+- Classification
+- Anomaly Detection
+- Forecasting
+
+## Machine Learning
+
+Include:
+
+- Isolation Forest
+- DBSCAN
+- K-Means
+- Random Forest
+- XGBoost
+- Neural Networks
+- AutoML model selection
+- Feature importance
+- Model evaluation
+- Prediction pipeline
+
+## Scientific Visualization
+
+Automatically generate interactive visualizations using Plotly.
+
+Support:
+
+- Line Charts
+- Bar Charts
+- Pie Charts
+- Scatter Plots
+- Bubble Charts
+- Heatmaps
+- Histograms
+- Box Plots
+- Violin Plots
+- Density Plots
+- Correlation Matrix
+- Pair Plot
+- Contour Plot
+- Surface Plot
+- 3D Scatter
+- 3D Surface
+- Polar Plot
+- Radar Chart
+- Area Chart
+- Stacked Area
+- Waterfall
+- Parallel Coordinates
+- Animated Time Series
+- Satellite Sky Plot
+- Elevation Plot
+- Azimuth Plot
+- TEC Heatmaps
+- Geographic Maps
+- Interactive World Maps
+- Leaflet Maps
+- Cesium 3D Globe
+
+Allow users to customize graph colors, themes, labels, legends, axes, and export charts as PNG, SVG, or PDF.
+
+## AI Assistant
+
+Integrate an AI assistant capable of:
+
+- Explaining uploaded datasets
+- Detecting anomalies
+- Summarizing results
+- Recommending preprocessing
+- Suggesting statistical models
+- Suggesting visualizations
+- Generating scientific interpretations
+- Answering questions about uploaded data
+- Writing conclusions
+- Generating publication-ready reports
+
+## Performance
+
+Optimize for large datasets (>20GB).
+
+Use:
+
+- NumPy
+- SciPy
+- Pandas
+- Polars
+- Dask
+- CuPy
+- Numba
+- PyArrow
+- Joblib
+- Multiprocessing
+- Multithreading
+- GPU acceleration (CUDA if available)
+- Lazy loading
+- Chunk processing
+- Streaming data processing
+- Memory optimization
+
+Display CPU, GPU, RAM, and processing progress in real time.
+
+## User Interface
+
+Design a premium interface inspired by GitHub, Vercel, Notion, NASA dashboards, and Linear.
+
+Include:
+
+- Dark Mode
+- Light Mode
+- Glassmorphism
+- Responsive Layout
+- Drag-and-Drop Upload
+- Animated Loading Screens
+- Interactive Dashboard
+- Resizable Panels
+- Dockable Windows
+- Multi-tab Workspace
+- Floating AI Chat
+- Global Search
+- Keyboard Shortcuts
+- Autosave
+- Undo/Redo
+- Recent Projects
+- Project Explorer
+- Notification Center
+- Processing Queue
+
+The interface should be extremely clean, modern, fast, and beginner-friendly.
+
+## Dashboard
+
+Provide widgets for:
+
+- Dataset Summary
+- Metadata
+- Statistics
+- Charts
+- AI Insights
+- File Explorer
+- Processing Status
+- Logs
+- Memory Usage
+- CPU Usage
+- GPU Usage
+- Recent Analyses
+- Project History
+
+## Export Options
+
+Allow exporting:
+
+- CSV
+- Excel
+- JSON
+- PNG
+- SVG
+- PDF
+- HTML Report
+- DOCX Report
+- PowerPoint
+- Python Notebook (.ipynb)
+- Python Script
+- R Script
+- MATLAB Script
+
+## GitHub/Open-Source Integration
+
+Leverage mature open-source libraries and repositories instead of reinventing parsers. Integrate or adapt components from:
+
+- georinex
+- gnss-lib-py
+- xarray
+- h5py
+- netCDF4
+- PyProj
+- Cartopy
+- Rasterio
+- ObsPy
+- Plotly
+- Bokeh
+- Altair
+- Panel
+- Polars
+- DuckDB
+- Apache Arrow
+- Dask
+- CuPy
+- Numba
+- Scikit-learn
+- Statsmodels
+- PyWavelets
+
+Create modular wrappers around these libraries to maintain a clean architecture.
+
+## Security
+
+Implement:
+
+- File validation
+- Secure uploads
+- Sandboxed processing
+- Authentication
+- Authorization
+- Rate limiting
+- Audit logs
+- Encrypted storage
+- Session management
+
+## Reports
+
+Automatically generate publication-quality scientific reports including:
+
+- Executive Summary
+- Dataset Description
+- Data Quality Assessment
+- Cleaning Log
+- Statistical Analysis
+- Graphs
+- AI Interpretation
+- Conclusions
+- Recommendations
+- References
+
+## Project Architecture
+
+Use a scalable modular architecture with separate modules for:
+
+- File Parsers
+- Data Cleaning
+- Scientific Processing
+- Statistical Analysis
+- Visualization
+- Machine Learning
+- AI Assistant
+- Reports
+- Export Services
+- Authentication
+- APIs
+- Database
+- UI Components
+
+Write fully typed, documented, production-ready code with comprehensive error handling, logging, unit tests, integration tests, and clean architecture principles.
+
+The final result should feel like a professional scientific laboratory platform comparable to MATLAB, OriginPro, ArcGIS Pro, or NASA data analysis tools, capable of converting raw scientific datasets into cleaned, analyzed, AI-interpreted, and publication-ready outputs through an elegant, high-performance, user-friendly interface.
