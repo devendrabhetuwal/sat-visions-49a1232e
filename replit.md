@@ -11,6 +11,35 @@ AI-powered geospatial intelligence platform. Upload GeoTIFF satellite imagery, c
 - **Maps**: Leaflet + react-leaflet
 - **Charts**: Recharts
 
+## TechLab AI — New Features
+
+Built on top of SatVision AI. Three new capabilities accessed via the **Data Lab** (`/data-lab`) tabs:
+
+### Machine Learning tab
+- Calls `POST /api/py/ml` → runs Isolation Forest anomaly detection, K-Means + DBSCAN clustering (with PCA scatter), and linear forecasting with confidence bands
+- Optional: select a target column for Random Forest regression + feature importance
+- All implemented in `python_parser/ml_engine.py`
+
+### Export tab
+- **CSV** — client-side, instant
+- **Excel** (`.xlsx`) — multi-sheet: Data + Statistics + Correlation; calls `POST /api/py/export/excel`
+- **Jupyter Notebook** (`.ipynb`) — full EDA + ML cells; calls `POST /api/py/export/notebook`
+- **HTML Report** — dark-theme styled; calls `POST /api/py/export/html`
+- All implemented in `python_parser/exporter.py`
+
+### AI assistant
+- `POST /api/py/ai/chat` — calls OpenAI `gpt-4o-mini`; requires `OPENAI_API_KEY` secret
+
+### New Python modules
+- `python_parser/analyzer.py` — cleaning pipeline + stats + PCA + FFT
+- `python_parser/ml_engine.py` — Isolation Forest, K-Means, DBSCAN, RF, forecasting
+- `python_parser/exporter.py` — Excel, notebook, HTML report
+- New packages in `pyproject.toml`: scikit-learn, scipy, openpyxl, nbformat, openai
+
+### New frontend components
+- `src/components/techlab/MLPanel.tsx` — ML results visualizer
+- `src/components/techlab/ExportPanel.tsx` — export format cards
+
 ## Running on Replit
 
 The Lovable vite config hard-codes port 8080 with IPv6 (`::`) which Replit doesn't support. Two workarounds are in place:

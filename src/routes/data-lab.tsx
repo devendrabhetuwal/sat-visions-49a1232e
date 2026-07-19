@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { MLPanel, type MLResults } from "@/components/techlab/MLPanel";
+import { ExportPanel, type ExportFormat } from "@/components/techlab/ExportPanel";
 import {
   Upload, FileText, BarChart3, Table, Download, Copy, RefreshCw,
   Satellite, ChevronUp, ChevronDown, AlertCircle, CheckCircle,
@@ -21,7 +23,7 @@ export const Route = createFileRoute("/data-lab")({
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type PageTab = "sources" | "clean" | "profile" | "visualize";
+type PageTab = "sources" | "clean" | "profile" | "visualize" | "ml" | "export";
 type DataFormat = "csv" | "json" | "tsv" | "plain" | "unknown";
 type ViewMode = "table" | "stats" | "export";
 type ChartKind = "timeseries" | "multiline" | "scatter" | "histogram" | "bar" | "altitude" | "contour" | "tmd" | "iri" | "nrlmsise";
@@ -574,6 +576,15 @@ function DataLabPage() {
   const [dropColSel, setDropColSel]   = useState("");
   const [cleanOps, setCleanOps]       = useState<CleanOp[]>([]);
 
+  // ML state
+  const [mlResults, setMlResults]   = useState<MLResults | null>(null);
+  const [mlLoading, setMlLoading]   = useState(false);
+  const [mlError, setMlError]       = useState("");
+  const [mlTargetCol, setMlTargetCol] = useState("");
+
+  // Export state
+  const [exportLoading, setExportLoading] = useState<string | null>(null);
+
   // Visualize state
   const [chartKind, setChartKind] = useState<ChartKind>("timeseries");
   const [chartX, setChartX]   = useState("");
@@ -639,6 +650,92 @@ function DataLabPage() {
     if (parsed) setStats(computeStats(parsed));
     toast("Reset to original data");
   };
+
+  // ─── CSV helper ─────────────────────────────────────────────────────────────
+  const parsedDataToCSV = (data: ParsedData): string => {
+    const visibleCols = data.headers.filter(h => !data.hiddenColumns.has(h));
+    const rows = data.rows.map(row =>
+      visibleCols.map(h => {
+        const v = row[h];
+        if (v === null || v === undefined) return "";
+        const s = String(v);
+        return (s.includes(",") || s.includes('"') || s.includes("\n"))
+          ? `"${s.replace(/"/g, '""')}"` : s;
+      }).join(",")
+    );
+    return [visibleCols.join(","), ...rows].join("\n");
+  };
+
+  // ─── ML Analysis ────────────────────────────────────────────────────────────
+  const runMLAnalysis = useCallback(async () => {
+    if (!active) return;
+    setMlLoading(true);
+    setMlError("");
+    setMlResults(null);
+    try {
+      const csv = parsedDataToCSV(active);
+      const res = await fetch("/api/py/ml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          csv,
+          filename: "data.csv",
+          target_col: mlTargetCol || null,
+          contamination: 0.05,
+          n_clusters: 3,
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt.slice(0, 300));
+      }
+      setMlResults(await res.json());
+      setPageTab("ml");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "ML analysis failed";
+      setMlError(msg);
+      toast.error("ML analysis failed");
+    } finally {
+      setMlLoading(false);
+    }
+  }, [active, mlTargetCol]);
+
+  // ─── Export ─────────────────────────────────────────────────────────────────
+  const handleExport = useCallback(async (format: ExportFormat) => {
+    if (!active) return;
+    setExportLoading(format);
+    try {
+      const csv = parsedDataToCSV(active);
+      if (format === "csv") {
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "techlab_data.csv"; a.click();
+        URL.revokeObjectURL(url);
+        toast.success("CSV downloaded");
+        return;
+      }
+      const res = await fetch(`/api/py/export/${format}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv, filename: "techlab_data" }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const exts: Record<string, string> = { excel: "xlsx", notebook: "ipynb", html: "html" };
+      a.download = `techlab_data.${exts[format] ?? format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${format.charAt(0).toUpperCase() + format.slice(1)} exported`);
+    } catch (e) {
+      toast.error(`Export failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+    } finally {
+      setExportLoading(null);
+    }
+  }, [active]);
 
   // ─── Sort & filter ──────────────────────────────────────────────────────────
   const toggleSort = (col: string) => {
@@ -721,7 +818,9 @@ function DataLabPage() {
             { id: "sources"   as PageTab, label: "Data Sources",   icon: <Database className="h-3.5 w-3.5" /> },
             { id: "clean"     as PageTab, label: "Import & Clean", icon: <Settings className="h-3.5 w-3.5" /> },
             { id: "profile"   as PageTab, label: "Profile",        icon: <Sigma className="h-3.5 w-3.5" /> },
-            { id: "visualize" as PageTab, label: "Visualize",      icon: <BarChart3 className="h-3.5 w-3.5" /> },
+            { id: "visualize" as PageTab, label: "Visualize",       icon: <BarChart3 className="h-3.5 w-3.5" /> },
+            { id: "ml"        as PageTab, label: "Machine Learning", icon: <Sparkles className="h-3.5 w-3.5" /> },
+            { id: "export"    as PageTab, label: "Export",           icon: <Download className="h-3.5 w-3.5" /> },
           ]).map(t => (
             <button key={t.id} onClick={() => setPageTab(t.id)}
               className={`flex items-center gap-1.5 border-b-2 px-5 py-3 text-sm font-medium transition-colors ${pageTab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
@@ -1518,6 +1617,70 @@ function DataLabPage() {
             </div>
           )
         )}
+
+        {/* ── MACHINE LEARNING ──────────────────────────────────────────────── */}
+        {pageTab === "ml" && (
+          !active ? (
+            <EmptyTabPrompt label="Load data first" onGo={() => setPageTab("sources")} goLabel="Browse Sources" />
+          ) : !mlResults && !mlLoading ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-24 text-center gap-5">
+              <Sparkles className="h-14 w-14 text-muted-foreground/25" />
+              <div>
+                <p className="font-semibold text-lg">Machine Learning Analysis</p>
+                <p className="text-sm text-muted-foreground mt-1">Anomaly detection · Clustering · Forecasting · Feature importance</p>
+              </div>
+              {active.numericColumns.length > 1 && (
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5">Target column for regression (optional)</label>
+                  <select value={mlTargetCol} onChange={e => setMlTargetCol(e.target.value)}
+                    className="rounded-lg border border-border bg-input px-3 py-1.5 text-xs outline-none focus:border-primary">
+                    <option value="">— none —</option>
+                    {active.numericColumns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              )}
+              {mlError && (
+                <p className="text-sm text-destructive max-w-md rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3">{mlError}</p>
+              )}
+              <button onClick={runMLAnalysis} disabled={mlLoading}
+                className="flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition disabled:opacity-50">
+                <Sparkles className="h-4 w-4" /> Run ML Analysis
+              </button>
+            </div>
+          ) : mlLoading ? (
+            <div className="flex flex-col items-center justify-center py-32 gap-5">
+              <div className="h-12 w-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              <div className="text-center">
+                <p className="font-medium">Running ML pipeline…</p>
+                <p className="text-xs text-muted-foreground mt-1">Anomaly detection · Clustering · Forecasting</p>
+              </div>
+            </div>
+          ) : mlResults ? (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" /> ML Analysis Results
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {mlResults.rows_analyzed?.toLocaleString()} rows analyzed
+                  </p>
+                </div>
+                <button onClick={runMLAnalysis} disabled={mlLoading}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition">
+                  <RefreshCw className="h-3 w-3" /> Re-run
+                </button>
+              </div>
+              <MLPanel results={mlResults} />
+            </div>
+          ) : null
+        )}
+
+        {/* ── EXPORT ────────────────────────────────────────────────────────── */}
+        {pageTab === "export" && (
+          <ExportPanel hasData={!!active} exportLoading={exportLoading} onExport={handleExport} />
+        )}
+
       </div>
     </div>
   );

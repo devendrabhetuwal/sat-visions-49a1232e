@@ -310,6 +310,149 @@ def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=rename)
 
 
+# ── TechLab AI — additional endpoints ─────────────────────────────────────────
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+
+from io import StringIO
+from pydantic import BaseModel
+
+
+class AnalyzeRequest(BaseModel):
+    csv: str
+    filename: str = "data"
+
+
+class MLRequest(BaseModel):
+    csv: str
+    filename: str = "data"
+    target_col: str | None = None
+    contamination: float = 0.05
+    n_clusters: int = 3
+
+
+class ExportRequest(BaseModel):
+    csv: str
+    filename: str = "data"
+
+
+class ChatRequest(BaseModel):
+    message: str
+    context: str = ""
+
+
+def _parse_csv(csv_str: str) -> pd.DataFrame:
+    try:
+        return pd.read_csv(StringIO(csv_str))
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"CSV parse error: {e}")
+
+
+@app.post("/api/py/analyze")
+async def analyze(req: AnalyzeRequest):
+    """Full analysis: cleaning report + statistics."""
+    from analyzer import clean_dataframe, compute_statistics
+    df = _parse_csv(req.csv)
+    if len(df) > 100_000:
+        df = df.sample(100_000, random_state=42)
+    cleaned = clean_dataframe(df)
+    stats = compute_statistics(cleaned["df"])
+    return JSONResponse({
+        "cleaning_report": cleaned["report"],
+        "statistics": stats,
+        "rows": len(cleaned["df"]),
+        "cols": len(cleaned["df"].columns),
+        "csv": cleaned["df"].to_csv(index=False),
+    })
+
+
+@app.post("/api/py/ml")
+async def ml_analysis(req: MLRequest):
+    """ML pipeline: anomaly detection + clustering + forecasting."""
+    from ml_engine import run_anomaly_detection, run_clustering, run_ml_pipeline
+    df = _parse_csv(req.csv)
+    if len(df) > 50_000:
+        df = df.sample(50_000, random_state=42)
+    return JSONResponse({
+        "anomalies":      run_anomaly_detection(df, contamination=req.contamination),
+        "clustering":     run_clustering(df, n_clusters=req.n_clusters),
+        "ml":             run_ml_pipeline(df, target_col=req.target_col),
+        "rows_analyzed":  len(df),
+    })
+
+
+@app.post("/api/py/export/excel")
+async def export_excel_ep(req: ExportRequest):
+    """Excel workbook with data + statistics + correlation sheets."""
+    from exporter import export_to_excel
+    from analyzer import compute_statistics
+    from fastapi.responses import Response
+    df = _parse_csv(req.csv)
+    stats = compute_statistics(df)
+    xlsx = export_to_excel(df, stats)
+    return Response(
+        content=xlsx,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{req.filename}.xlsx"'},
+    )
+
+
+@app.post("/api/py/export/notebook")
+async def export_notebook_ep(req: ExportRequest):
+    """Jupyter notebook with full EDA + ML cells."""
+    from exporter import export_to_notebook
+    from fastapi.responses import Response
+    df = _parse_csv(req.csv)
+    nb_json = export_to_notebook(df, filename=req.filename)
+    return Response(
+        content=nb_json.encode(),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{req.filename}.ipynb"'},
+    )
+
+
+@app.post("/api/py/export/html")
+async def export_html_ep(req: ExportRequest):
+    """Styled HTML report."""
+    from exporter import export_to_html
+    from analyzer import compute_statistics
+    from fastapi.responses import HTMLResponse
+    df = _parse_csv(req.csv)
+    stats = compute_statistics(df)
+    html = export_to_html(df, stats, None, filename=req.filename)
+    return HTMLResponse(content=html)
+
+
+@app.post("/api/py/ai/chat")
+async def ai_chat(req: ChatRequest):
+    """AI assistant powered by OpenAI."""
+    import os as _env_os
+    api_key = _env_os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY not configured. Add it as a Replit Secret.")
+    try:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=api_key)
+        system = (
+            "You are TechLab AI, an expert scientific data analysis assistant. "
+            "You help researchers and engineers understand datasets, interpret statistics, "
+            "detect anomalies, recommend preprocessing steps, and write scientific conclusions. "
+            "Be concise yet thorough. When given data context, reference specific values."
+        )
+        messages: list[dict] = [{"role": "system", "content": system}]
+        user_content = f"Data context:\n{req.context}\n\nQuestion: {req.message}" if req.context else req.message
+        messages.append({"role": "user", "content": user_content})
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=1200,
+            temperature=0.7,
+        )
+        return JSONResponse({"response": response.choices[0].message.content, "model": "gpt-4o-mini"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI error: {e}")
+
+
 # ── Entry point ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
