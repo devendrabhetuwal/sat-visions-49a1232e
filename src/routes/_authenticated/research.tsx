@@ -15,7 +15,20 @@ export const Route = createFileRoute("/_authenticated/research")({
 // Puter AI global
 declare global {
   interface Window {
-    puter: { ai: { chat: (p: string) => Promise<{ message?: { content?: string }; content?: string; text?: string; toString(): string }> } };
+    puter: {
+      ai: {
+        chat: (
+          p: string,
+          options?: { model?: string; stream?: boolean },
+        ) => Promise<{ message?: { content?: string }; content?: string; text?: string; toString(): string }>;
+      };
+      auth?: {
+        isSignedIn: () => boolean;
+        signIn: () => Promise<void>;
+        signOut: () => Promise<void>;
+        getUser: () => Promise<unknown>;
+      };
+    };
   }
 }
 

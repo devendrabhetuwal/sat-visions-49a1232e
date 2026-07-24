@@ -17,6 +17,12 @@ declare global {
           toString(): string;
         }>;
       };
+      auth?: {
+        isSignedIn: () => boolean;
+        signIn: () => Promise<void>;
+        signOut: () => Promise<void>;
+        getUser: () => Promise<unknown>;
+      };
     };
   }
 }
