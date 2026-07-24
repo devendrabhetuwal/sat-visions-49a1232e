@@ -14,11 +14,17 @@ export const Route = createFileRoute("/auth")({
 declare global {
   interface Window {
     puter: {
-      auth: {
+      auth?: {
         isSignedIn: () => boolean;
         signIn:     () => Promise<void>;
         signOut:    () => Promise<void>;
-        getUser:    () => Promise<PuterUser>;
+        getUser:    () => Promise<unknown>;
+      };
+      ai?: {
+        chat: (
+          p: string,
+          options?: { model?: string; stream?: boolean },
+        ) => Promise<{ message?: { content?: string }; content?: string; text?: string; toString(): string }>;
       };
     };
   }
