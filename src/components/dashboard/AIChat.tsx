@@ -2,24 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Sparkles, Bot } from "lucide-react";
 
 // Puter.js is loaded via a <script> tag in __root.tsx.
-// It exposes a global `puter` object with free AI access — no API key required.
-declare global {
-  interface Window {
-    puter: {
-      ai: {
-        chat: (
-          prompt: string,
-          options?: { model?: string; stream?: boolean }
-        ) => Promise<{
-          message?: { content?: string };
-          content?: string;
-          text?: string;
-          toString(): string;
-        }>;
-      };
-    };
-  }
-}
+// Global `window.puter` shape lives in src/global.d.ts.
 
 interface Message { role: "user" | "assistant"; content: string; }
 

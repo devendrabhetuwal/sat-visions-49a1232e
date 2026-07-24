@@ -12,12 +12,7 @@ export const Route = createFileRoute("/_authenticated/research")({
   component: ResearchPage,
 });
 
-// Puter AI global
-declare global {
-  interface Window {
-    puter: { ai: { chat: (p: string) => Promise<{ message?: { content?: string }; content?: string; text?: string; toString(): string }> } };
-  }
-}
+// Puter global lives in src/global.d.ts.
 
 const FORMATS = [
   { id: "IEEE",      label: "IEEE",       desc: "Numbered citations, two-column, 10pt Times",       cite: "IEEE numbered [1]" },

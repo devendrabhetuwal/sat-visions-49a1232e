@@ -1278,7 +1278,7 @@ function DataLabPage() {
                             <XAxis dataKey="bin" tick={{ fontSize: 8, fill: "var(--muted-foreground)" }} interval="preserveStartEnd" />
                             <YAxis tick={false} />
                             <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 10 }}
-                              formatter={(v: number, _: string, { payload }: { payload: { bin: number } }) => [`${v} (${payload?.bin ?? ""})`, "Count"]} />
+                              formatter={((v: number, _n: string, item: { payload?: { bin?: number } }) => [`${v} (${item?.payload?.bin ?? ""})`, "Count"]) as never} />
                             <Bar dataKey="count" fill={PANEL_COLORS[ci % PANEL_COLORS.length]} radius={[2, 2, 0, 0]} opacity={0.85} />
                           </BarChart>
                         </ResponsiveContainer>
@@ -1438,8 +1438,8 @@ function DataLabPage() {
                 {/* Log scale toggles */}
                 {!["altitude", "iri", "nrlmsise", "tmd", "multiline", "histogram", "contour"].includes(chartKind) && (
                   <div className="flex gap-2 ml-auto">
-                    {[["X", logScaleX, setLogScaleX], ["Y", logScaleY, setLogScaleY]].map(([axis, val, set]) => (
-                      <button key={axis as string} onClick={() => (set as (v: boolean) => void)(!val as boolean)}
+                    {[["X", logScaleX, setLogScaleX] as const, ["Y", logScaleY, setLogScaleY] as const].map(([axis, val, set]) => (
+                      <button key={axis} onClick={() => set(!val)}
                         className={`rounded-lg px-3 py-1.5 text-[10px] font-medium transition ${val ? "bg-primary/20 text-primary" : "glass text-muted-foreground"}`}>
                         log {axis}
                       </button>
@@ -1557,7 +1557,7 @@ function DataLabPage() {
                         <XAxis dataKey="bin" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} label={{ value: chartY, position: "insideBottom", offset: -10, style: { fontSize: 11, fill: "var(--muted-foreground)" } }} />
                         <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} scale={logScaleY ? "log" : "auto"} />
                         <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 11 }}
-                          formatter={(v: number, _: string, { payload }: { payload: { bin: number; pct: number } }) => [`${v} (${payload?.pct?.toFixed(1)}%)`, "Count"]} />
+                          formatter={((v: number, _n: string, item: { payload?: { bin?: number; pct?: number } }) => [`${v} (${item?.payload?.pct?.toFixed(1) ?? ""}%)`, "Count"]) as never} />
                         <Bar dataKey="count" fill="url(#histGrad)" radius={[3, 3, 0, 0]} />
                         <defs>
                           <linearGradient id="histGrad" x1="0" y1="0" x2="0" y2="1">

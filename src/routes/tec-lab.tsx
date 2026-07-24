@@ -18,6 +18,8 @@ import type { ParseResult, TECRecord } from "@/lib/tec/parser";
 import { runEngine } from "@/lib/tec/engine";
 import type { EngineResult } from "@/lib/tec/engine";
 import { EnginePanel } from "@/components/tec/EnginePanel";
+import { SkyPlot } from "@/components/tec/SkyPlot";
+import { GroundTrack } from "@/components/tec/GroundTrack";
 import {
   computeEpochBins, buildStationSeries, detectStormPhases,
   buildHeatmap, tecToColor, STATION_COLORS,
@@ -87,7 +89,7 @@ function generateDemoData(): string {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type ViewMode = "tec" | "dual" | "delta" | "roti" | "slant" | "heatmap" | "map" | "summary" | "engine";
+type ViewMode = "tec" | "dual" | "delta" | "roti" | "slant" | "heatmap" | "map" | "skyplot" | "groundtrack" | "summary" | "engine";
 type FileStatus = "pending" | "processing" | "done" | "error";
 
 interface UploadedFile {
@@ -108,6 +110,8 @@ const VIEWS: { id: ViewMode; label: string; icon: React.ReactNode; desc: string 
   { id: "slant",   label: "Slant TEC",           icon: <Layers className="h-4 w-4" />,      desc: "Per-satellite sTEC" },
   { id: "heatmap", label: "Daily Heatmap",       icon: <Thermometer className="h-4 w-4" />, desc: "Lat × Time × TEC" },
   { id: "map",     label: "World Map",           icon: <Globe className="h-4 w-4" />,       desc: "Station locations" },
+  { id: "skyplot", label: "Sky Plot",            icon: <Satellite className="h-4 w-4" />,   desc: "Polar elevation × azimuth" },
+  { id: "groundtrack", label: "Ground Track",    icon: <MapIcon className="h-4 w-4" />,     desc: "Satellite IPP tracks" },
   { id: "summary", label: "Summary",             icon: <Eye className="h-4 w-4" />,         desc: "Stats dashboard" },
   { id: "engine",  label: "⚡ Engine",            icon: <Cpu className="h-4 w-4" />,         desc: "Advanced signal-processing analysis" },
 ];
@@ -273,6 +277,7 @@ function TECLabPage() {
     MapContainer: React.ComponentType<Record<string, unknown>>;
     TileLayer: React.ComponentType<Record<string, unknown>>;
     CircleMarker: React.ComponentType<Record<string, unknown>>;
+    Polyline: React.ComponentType<Record<string, unknown>>;
     Popup: React.ComponentType<Record<string, unknown>>;
   } | null>(null);
 
@@ -282,6 +287,7 @@ function TECLabPage() {
         MapContainer:   m.MapContainer   as unknown as React.ComponentType<Record<string, unknown>>,
         TileLayer:      m.TileLayer      as unknown as React.ComponentType<Record<string, unknown>>,
         CircleMarker:   m.CircleMarker   as unknown as React.ComponentType<Record<string, unknown>>,
+        Polyline:       m.Polyline       as unknown as React.ComponentType<Record<string, unknown>>,
         Popup:          m.Popup          as unknown as React.ComponentType<Record<string, unknown>>,
       });
     });
@@ -794,6 +800,14 @@ function TECLabPage() {
 
                 {/* Heatmap */}
                 {view === "heatmap" && <HeatmapView data={heatData} />}
+
+                {/* Sky Plot */}
+                {view === "skyplot" && <SkyPlot records={filteredRecords} />}
+
+                {/* Ground Track */}
+                {view === "groundtrack" && (
+                  <GroundTrack records={filteredRecords} map={MapComponents} />
+                )}
 
                 {/* World Map */}
                 {view === "map" && (

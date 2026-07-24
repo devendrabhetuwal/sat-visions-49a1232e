@@ -11,18 +11,7 @@ export const Route = createFileRoute("/auth")({
   component: LoginPage,
 });
 
-declare global {
-  interface Window {
-    puter: {
-      auth: {
-        isSignedIn: () => boolean;
-        signIn:     () => Promise<void>;
-        signOut:    () => Promise<void>;
-        getUser:    () => Promise<PuterUser>;
-      };
-    };
-  }
-}
+// Puter global lives in src/global.d.ts.
 
 export interface PuterUser {
   username:         string;
