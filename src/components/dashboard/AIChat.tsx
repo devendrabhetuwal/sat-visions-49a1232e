@@ -6,8 +6,7 @@ import { Send, Loader2, Sparkles, Bot } from "lucide-react";
 declare global {
   interface Window {
     puter: {
-      auth?: unknown;
-      ai?: {
+      ai: {
         chat: (
           prompt: string,
           options?: { model?: string; stream?: boolean }
@@ -62,7 +61,7 @@ export function AIChat({ datasetContext }: { datasetContext?: string }) {
       const fullPrompt = systemPrefix + text;
 
       // Call Puter.js — free AI (GPT-4o), runs entirely in the browser, no API key needed
-      const response = await window.puter.ai!.chat(fullPrompt);
+      const response = await window.puter.ai.chat(fullPrompt);
 
       const reply =
         response.message?.content ??
