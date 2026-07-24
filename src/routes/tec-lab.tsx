@@ -277,6 +277,7 @@ function TECLabPage() {
     MapContainer: React.ComponentType<Record<string, unknown>>;
     TileLayer: React.ComponentType<Record<string, unknown>>;
     CircleMarker: React.ComponentType<Record<string, unknown>>;
+    Polyline: React.ComponentType<Record<string, unknown>>;
     Popup: React.ComponentType<Record<string, unknown>>;
   } | null>(null);
 
@@ -286,6 +287,7 @@ function TECLabPage() {
         MapContainer:   m.MapContainer   as unknown as React.ComponentType<Record<string, unknown>>,
         TileLayer:      m.TileLayer      as unknown as React.ComponentType<Record<string, unknown>>,
         CircleMarker:   m.CircleMarker   as unknown as React.ComponentType<Record<string, unknown>>,
+        Polyline:       m.Polyline       as unknown as React.ComponentType<Record<string, unknown>>,
         Popup:          m.Popup          as unknown as React.ComponentType<Record<string, unknown>>,
       });
     });
@@ -798,6 +800,14 @@ function TECLabPage() {
 
                 {/* Heatmap */}
                 {view === "heatmap" && <HeatmapView data={heatData} />}
+
+                {/* Sky Plot */}
+                {view === "skyplot" && <SkyPlot records={filteredRecords} />}
+
+                {/* Ground Track */}
+                {view === "groundtrack" && (
+                  <GroundTrack records={filteredRecords} map={MapComponents} />
+                )}
 
                 {/* World Map */}
                 {view === "map" && (
